@@ -5,6 +5,9 @@
   "description": "Enable copy, paste and text extraction on Chaoxing with AI answers",
   "permissions": ["clipboardWrite", "scripting", "storage"],
   "host_permissions": ["*://*.chaoxing.com/*", "https://api.deepseek.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["*://*.chaoxing.com/*"],
