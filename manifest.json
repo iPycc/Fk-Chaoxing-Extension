@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Chaoxing Copy & Paste Helper",
-  "version": "1.1",
-  "description": "Enable copy, paste and text extraction on Chaoxing",
-  "permissions": ["clipboardWrite", "scripting"],
-  "host_permissions": ["*://*.chaoxing.com/*"],
+  "version": "1.3",
+  "description": "Enable copy, paste and text extraction on Chaoxing with AI answers",
+  "permissions": ["clipboardWrite", "scripting", "storage"],
+  "host_permissions": ["*://*.chaoxing.com/*", "https://api.deepseek.com/*"],
   "content_scripts": [
     {
       "matches": ["*://*.chaoxing.com/*"],
@@ -14,15 +14,21 @@
         "modules/CopyEnabler.js",
         "modules/CopyAllQuestion.js",
         "modules/UEditorUnlock.js",
+        "modules/ai-answer/notify.js",
+        "modules/ai-answer/api.js",
+        "modules/ai-answer/ui.js",
+        "modules/ai-answer/core.js",
+        "modules/ai-answer/index.js",
         "fk-cx-main.js"
       ],
+      "css": ["modules/ai-answer/notify.css"],
       "run_at": "document_start",
       "all_frames": true
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/table.json", "injected.js"],
+      "resources": ["assets/table.json", "injected.js", "modules/ai-answer/notify.css"],
       "matches": ["*://*.chaoxing.com/*"]
     }
   ],

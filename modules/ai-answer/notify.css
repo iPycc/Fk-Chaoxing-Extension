@@ -1,0 +1,166 @@
+/* 浮动通知面板样式 */
+#ai-notify-panel {
+  position: fixed;
+  width: 400px;
+  height: 450px;
+  min-width: 300px;
+  min-height: 250px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  z-index: 10001;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  resize: both;
+  transition: box-shadow 0.2s;
+}
+
+#ai-notify-panel:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+#ai-notify-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  cursor: move;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+#ai-notify-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-notify-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ai-notify-btn {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: #fff;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.ai-notify-btn:hover {
+  background: rgba(255,255,255,0.35);
+  transform: scale(1.1);
+}
+
+#ai-notify-logs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  background: #fafafa;
+}
+
+.ai-log-item {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  animation: slideIn 0.3s ease;
+  word-break: break-word;
+}
+
+.ai-log-item b {
+  color: inherit;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ai-log-info {
+  background: #e8f4fd;
+  color: #1976d2;
+  border-left: 4px solid #1976d2;
+}
+
+.ai-log-success {
+  background: #e8f5e9;
+  color: #388e3c;
+  border-left: 4px solid #388e3c;
+}
+
+.ai-log-error {
+  background: #ffebee;
+  color: #d32f2f;
+  border-left: 4px solid #d32f2f;
+}
+
+.ai-log-warning {
+  background: #fff8e1;
+  color: #f57c00;
+  border-left: 4px solid #f57c00;
+}
+
+.ai-log-time {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-right: 8px;
+}
+
+/* 悬浮按钮 */
+#ai-notify-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 80px;
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+  z-index: 10000;
+  transition: transform 0.2s, box-shadow 0.2s;
+  user-select: none;
+}
+
+#ai-notify-fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+/* 调整大小手柄 */
+#ai-notify-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: se-resize;
+}
+
+/* AI按钮样式 */
+#ai-get-answers-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

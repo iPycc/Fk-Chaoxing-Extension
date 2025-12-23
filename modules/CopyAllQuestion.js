@@ -101,9 +101,17 @@ const CopyAllQuestion = {
       
       const btn = document.createElement('button');
       btn.id = '__cx_copy_all_btn';
-      btn.textContent = '点击复制所有题目';
+      btn.textContent = '📋 复制题目';
       btn.type = 'button';
-      btn.style.cssText = 'position:sticky;top:8px;margin:8px 0;padding:6px 12px;background:#1677ff;color:#fff;border:none;border-radius:4px;font-size:14px;cursor:pointer;z-index:9999';
+      btn.style.cssText = 'position:sticky;top:8px;margin:8px 4px 8px 0;padding:6px 12px;background:#fff;color:#333;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;cursor:pointer;z-index:9999;transition:all 0.2s';
+      btn.addEventListener('mouseenter', () => {
+        btn.style.borderColor = '#1677ff';
+        btn.style.color = '#1677ff';
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.borderColor = '#d9d9d9';
+        btn.style.color = '#333';
+      });
       btn.addEventListener('click', async () => {
         try {
           const content = await this.collectAllTitles();

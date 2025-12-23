@@ -2,7 +2,7 @@
 // Load all modules and initialize
 
 // Import modules (loaded via manifest.json content_scripts)
-// Modules: PasteEnabler, CopyEnabler, CopyAllQuestion, UEditorUnlock
+// Modules: PasteEnabler, CopyEnabler, CopyAllQuestion, UEditorUnlock, AIAnswerHelper
 
 const ChaoxingHelper = {
   // Init early modules (document_start)
@@ -18,6 +18,7 @@ const ChaoxingHelper = {
     try {
       CopyEnabler.decrypt().catch(() => {});
       CopyAllQuestion.init();
+      AIAnswerHelper.init();
     } catch (err) {}
   },
 
