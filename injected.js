@@ -133,7 +133,6 @@
 
   /**
    * Monitor and process UEditor instances
-   * 完全按照原始油猴脚本的实现
    * Detects window.UE.instants and processes all instances
    * Retries up to 40 times with 500ms interval (20 seconds total)
    */
