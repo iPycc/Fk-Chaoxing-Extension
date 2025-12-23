@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Chaoxing Copy & Paste Helper",
+  "version": "1.0.0",
+  "description": "Enable copy, paste and text extraction on Chaoxing",
+  "permissions": ["clipboardWrite", "scripting"],
+  "host_permissions": ["*://*.chaoxing.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://*.chaoxing.com/*"],
+      "js": ["assets/TyprMd5.js", "content-script.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/table.json", "injected.js"],
+      "matches": ["*://*.chaoxing.com/*"]
+    }
+  ],
+  "icons": {
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}
