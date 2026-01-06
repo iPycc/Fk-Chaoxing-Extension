@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>超星助手</title>
+  
+  <!-- 引入 Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- 引入 RemixIcon CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 头部：Logo与工具栏 -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-icon">
+          <img src="icons/chaoxing.png" alt="Logo">
+        </div>
+        <div class="brand-text">
+          <span class="logo">Fk-Chaoxing</span>
+          <span class="version">v1.3.1</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-reload" class="icon-btn" title="重载扩展">
+          <i class="ri-loop-left-line"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- 状态概览 -->
+    <section class="status-card">
+      <div class="status-item">
+        <div class="status-icon-wrapper" id="status-icon-bg">
+          <i id="status-icon" class="ri-loader-4-line spin-animation"></i>
+        </div>
+        <div class="status-info">
+          <span class="status-label">当前页面</span>
+          <span id="page-type" class="status-value">检测中...</span>
+        </div>
+      </div>
+      <div class="divider-vertical"></div>
+      <div class="status-item">
+        <div class="status-icon-wrapper count-bg">
+          <i class="ri-file-list-3-line"></i>
+        </div>
+        <div class="status-info">
+          <span class="status-label">题目数量</span>
+          <span id="question-count" class="status-value count-text">0</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 核心功能区 -->
+    <section class="actions-grid">
+      <button id="btn-get-questions" class="action-card">
+        <div class="action-icon">
+          <i class="ri-clipboard-line"></i>
+        </div>
+        <div class="action-info">
+          <div class="action-title">获取题目</div>
+          <div class="action-desc">提取当前页面所有题目</div>
+        </div>
+        <div class="action-arrow">
+          <i class="ri-arrow-right-s-line"></i>
+        </div>
+      </button>
+      
+      <button id="btn-ai-answer" class="action-card dark">
+        <div class="action-icon">
+          <i class="ri-openai-fill"></i>
+        </div>
+        <div class="action-info">
+          <div class="action-title">AI 答题</div>
+          <div class="action-desc">自动分析并获取答案</div>
+        </div>
+        <div class="action-arrow">
+          <i class="ri-arrow-right-s-line"></i>
+        </div>
+      </button>
+    </section>
+
+    <!-- 日志区域 -->
+    <section class="log-section">
+      <div class="log-header">
+        <span class="section-title">
+          <i class="ri-terminal-box-line"></i> 运行日志
+        </span>
+        <button id="btn-clear-log" class="text-btn">
+          <i class="ri-delete-bin-line"></i> 清空
+        </button>
+      </div>
+      <div id="log-content" class="log-content">
+        <div class="log-item info">
+          <span class="log-time">--:--</span>
+          <span class="log-msg">等待操作...</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 底部信息 -->
+    <footer class="footer">
+      <div class="author-info">
+        <i class="ri-code-s-slash-line"></i>
+        <span>Designed by iPycc</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/ipycc/fk-chaoxing" target="_blank" class="footer-link">
+          <i class="ri-github-fill"></i> GitHub
+        </a>
+        <a href="https://scriptcat.org/" target="_blank" class="footer-link">
+          <i class="ri-code-box-line"></i> ScriptCat
+        </a>
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

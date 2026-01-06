@@ -22,5 +22,6 @@ const UEditorUnlock = {
 
   init() {
     this.injectPageScript();
+    // 移除日志 - 太详细
   }
 };

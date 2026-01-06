@@ -5,16 +5,26 @@ const AINotify = {
   isDragging: false,
   dragOffset: { x: 0, y: 0 },
 
-  // 检查是否是主页面
+  // 检查是否是主页面或考试页面
   isMainPage() {
     return window.location.href.includes('mooc1.chaoxing.com/mycourse/studentstudy') ||
            window.location.href.includes('mooc2-ans.chaoxing.com/mycourse/studentstudy');
   },
 
+  isExamPage() {
+    return window.location.href.includes('/exam-ans/mooc2/exam/preview');
+  },
+
+  shouldShowUI() {
+    return this.isMainPage() || this.isExamPage();
+  },
+
   // 初始化通知面板
   init() {
-    if (!this.isMainPage()) return;
+    if (!this.shouldShowUI()) return;
     if (document.getElementById('ai-notify-panel')) return;
+    
+    GlobalLogger.info('AI 通知面板已加载');
     
     // 随机位置
     const randomTop = Math.floor(Math.random() * 200) + 100;
@@ -23,7 +33,7 @@ const AINotify = {
     const panelHtml = `
       <div id="ai-notify-panel" style="top:${randomTop}px;right:${randomRight}px;">
         <div id="ai-notify-header">
-          <h4>🤖 AI 答题助手</h4>
+          <h4>AI 答题助手</h4>
           <div class="ai-notify-controls">
             <button class="ai-notify-btn" id="ai-notify-clear" title="清空日志">🗑</button>
             <button class="ai-notify-btn" id="ai-notify-minimize" title="最小化">−</button>

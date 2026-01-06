@@ -21,16 +21,19 @@ const AIAnswerCore = {
       AINotify.clear();
       AINotify.show();
       AINotify.info('开始获取题目...');
+      GlobalLogger.info('AI 开始处理');
 
       // 获取所有题目
       const questions = await this.collectQuestions();
       
       if (questions.length === 0) {
         AINotify.error('未找到任何题目');
+        GlobalLogger.error('未找到题目');
         return;
       }
       
       AINotify.success(`找到 ${questions.length} 道题目`);
+      GlobalLogger.success(`AI 找到 ${questions.length} 道题目`);
       AINotify.info('正在发送到 AI 分析...');
 
       // 调用 AI API
@@ -45,24 +48,27 @@ const AIAnswerCore = {
       this.displayAnswers(questions, answers);
       
       AINotify.success(`✅ 完成！已获取 ${answers.length} 道题目的答案`);
+      GlobalLogger.success(`AI 完成，获取 ${answers.length} 个答案`);
 
     } catch (err) {
       console.error('[AI] 处理失败:', err);
       AINotify.error(`处理失败: ${err.message}`);
+      GlobalLogger.error(`AI 处理失败`);
     } finally {
       this.isProcessing = false;
       if (btn) {
         btn.disabled = false;
-        btn.textContent = '🤖 AI 获取答案';
+        btn.textContent = '从🤖 AI 获取答案';
       }
     }
   },
 
   // 收集所有题目
   async collectQuestions() {
+    // 使用统一的题目提取接口
+    // CopyAllQuestion.extractQuestionsFromDocument() 会自动检测页面类型
+    // 并调用相应的提取方法（考试页面或作业页面）
     const allQuestions = [];
-    
-    // 使用原有的递归收集方法
     const sections = await CopyAllQuestion.collectTitlesFromDocument(document);
     
     sections.forEach(section => {

@@ -1,9 +1,9 @@
-// DeepSeek API 调用模块
+// DeepSeek API 
 const AIApi = {
-  API_KEY: 'xxx',
+  API_KEY: 'sk-c61f28ed000845e9a7af61f871c2b4d8',
   MODEL: 'deepseek-chat',
 
-  // 构建提示词
+  // prompt
   buildPrompt(questions) {
     let prompt = '请根据以下题目给出答案。对于选择题，直接给出正确选项字母；对于其他题型，给出简洁答案。\n\n';
     

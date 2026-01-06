@@ -4,6 +4,7 @@ const CopyEnabler = {
   // Main decryption function
   async decrypt() {
     try {
+      GlobalLogger.info('解密复制保护');
       const styleElement = this.findStyleContaining('font-cxsecret');
       if (!styleElement) return;
 
@@ -18,6 +19,7 @@ const CopyEnabler = {
       const table = await response.json();
       
       const charMap = this.createCharMap(fontData, table);
+      GlobalLogger.success('复制保护已解除');
       this.replaceEncryptedText(charMap);
       
       console.log(`[CX] Decrypted ${Object.keys(charMap).length} chars`);

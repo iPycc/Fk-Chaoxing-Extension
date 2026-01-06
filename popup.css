@@ -1,0 +1,439 @@
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f7f9;
+  --bg-hover: #f0f0f2;
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --border-color: #ebebeb;
+  
+  --accent-color: #000000;
+  --accent-text: #ffffff;
+  
+  /* 状态颜色 */
+  --status-exam: #722ed1;
+  --status-work: #1677ff;
+  --status-other: #52c41a;
+  --status-error: #999999;
+  
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 340px;
+  /* 使用 Nunito 作为首选英文字体，Noto Sans SC 作为中文字体 */
+  font-family: 'Nunito', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* 头部样式 */
+.header {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  /* background: var(--accent-color); */
+  /* color: var(--accent-text); */
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  overflow: hidden;
+}
+
+.logo-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.logo {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.3px;
+}
+
+.version {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: 'SF Mono', 'Roboto Mono', monospace;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+/* 状态卡片 */
+.status-card {
+  margin: 16px 20px 0;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.divider-vertical {
+  width: 1px;
+  height: 24px;
+  background: var(--border-color);
+  margin: 0 16px;
+}
+
+.status-icon-wrapper {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.3s ease;
+}
+
+/* 默认灰色背景 */
+#status-icon-bg {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-tertiary);
+}
+
+.count-bg {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-secondary);
+}
+
+.status-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.status-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+.status-value {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.count-text {
+  font-family: 'SF Mono', 'Roboto Mono', monospace;
+  font-size: 14px;
+}
+
+/* 核心功能区 */
+.actions-grid {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-card {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  gap: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.action-card:hover {
+  border-color: var(--text-secondary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.action-card:active {
+  transform: translateY(0);
+}
+
+.action-card.dark {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--accent-text);
+}
+
+.action-card.dark:hover {
+  background: #1a1a1a; /* 稍微浅一点的黑色 */
+}
+
+.action-card.dark .action-desc {
+  color: rgba(255,255,255,0.7);
+}
+
+.action-card.dark .action-arrow {
+  color: rgba(255,255,255,0.5);
+}
+
+.action-icon {
+  font-size: 24px;
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-info {
+  flex: 1;
+}
+
+.action-title {
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.action-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.action-arrow {
+  font-size: 20px;
+  color: var(--border-color);
+  transition: transform 0.2s ease;
+}
+
+.action-card:hover .action-arrow {
+  transform: translateX(2px);
+  color: var(--text-tertiary);
+}
+
+.action-card.dark:hover .action-arrow {
+  color: rgba(255,255,255,0.9);
+}
+
+/* 日志区域 */
+.log-section {
+  padding: 0 20px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.text-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.text-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.log-content {
+  background: #1e1e1e; /* 黑色背景的日志区，像终端 */
+  border-radius: 8px;
+  padding: 12px;
+  overflow-y: auto;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 11px;
+  height: 150px; /* 固定高度 */
+  color: #d4d4d4;
+  border: 1px solid #333;
+}
+
+.log-item {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.log-item:last-child {
+  margin-bottom: 0;
+}
+
+.log-time {
+  color: #666;
+  min-width: 32px;
+}
+
+.log-msg {
+  color: #ccc;
+  word-break: break-all;
+}
+
+.log-item.info .log-msg { color: #69c0ff; }
+.log-item.success .log-msg { color: #95de64; }
+.log-item.error .log-msg { color: #ff7875; }
+.log-item.warning .log-msg { color: #ffc069; }
+
+/* 底部 */
+.footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+}
+
+.author-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.footer-link {
+  color: var(--text-tertiary);
+  text-decoration: none;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.footer-link:hover {
+  color: var(--text-primary);
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ccc;
+}
+
+/* 动画状态 */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+.action-card.loading .action-icon {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}

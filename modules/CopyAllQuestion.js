@@ -3,8 +3,23 @@
 const CopyAllQuestion = {
   MESSAGE: { REQUEST: 'CX_GET_TITLES', RESPONSE: 'CX_TITLES_RESPONSE' },
 
+  // Check if current page is an exam page
+  isExamPage() {
+    const isExam = window.location.href.includes('/exam-ans/mooc2/exam/preview');
+    // 移除日志 - 太详细
+    return isExam;
+  },
+
   // Extract questions from document
   extractQuestionsFromDocument(doc) {
+    // Check page type and use appropriate extraction method
+    if (this.isExamPage()) {
+      // 移除日志 - 太详细
+      return this.extractExamQuestions(doc);
+    }
+    
+    // 移除日志 - 太详细
+    // Original study page logic
     const questions = [];
     const getTitleFrom = (root) => {
       const node = root.querySelector('.Zy_TItle .fontLabel, .Zy_Title .fontLabel, .newZy_TItle .fontLabel, .newZy_Title .fontLabel')
@@ -33,6 +48,65 @@ const CopyAllQuestion = {
       this.extractTitlesFromDocument(doc).forEach(t => questions.push({ title: t, options: [], type: 'other' }));
     }
     return questions;
+  },
+  
+  // Extract questions from exam page
+  extractExamQuestions(doc = document) {
+    const questions = [];
+    
+    // Find all question containers
+    const containers = doc.querySelectorAll('.singleQuesId[id^="sigleQuestionDiv_"]');
+    // 移除详细日志
+    
+    containers.forEach(container => {
+      const question = this.parseExamQuestion(container);
+      if (question) questions.push(question);
+    });
+    
+    // 移除详细日志
+    return questions;
+  },
+  
+  // Parse a single exam question
+  parseExamQuestion(container) {
+    // Extract title
+    const titleEl = container.querySelector('h3.mark_name.colorDeep');
+    const title = this.extractExamTitle(titleEl);
+    
+    // Extract options
+    const options = this.extractExamOptions(container);
+    
+    // Determine question type based on number of options
+    const type = options.length === 0 ? 'other' : 
+                 options.length <= 4 ? 'single' : 'multi';
+    
+    return { title, options, type };
+  },
+  
+  // Extract exam question title
+  extractExamTitle(titleEl) {
+    // Extract content from div with overflow style
+    const contentDiv = titleEl?.querySelector('div[style*="overflow"]');
+    if (contentDiv) {
+      return contentDiv.textContent.replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  },
+  
+  // Extract exam question options
+  extractExamOptions(container) {
+    const options = [];
+    const optionEls = container.querySelectorAll('.stem_answer .answerBg');
+    
+    optionEls.forEach(el => {
+      const letter = el.querySelector('.num_option')?.textContent.trim();
+      const content = el.querySelector('.answer_p')?.textContent.trim();
+      if (letter && content) {
+        options.push(`${letter}. ${content}`);
+      }
+    });
+    
+    return options;
   },
   
   // Extract titles (legacy)
@@ -96,8 +170,27 @@ const CopyAllQuestion = {
   insertCopyButton() {
     try {
       if (document.getElementById('__cx_copy_all_btn')) return;
-      const anchor = Array.from(document.querySelectorAll('h2')).find(h => h.textContent?.trim()?.includes('章节详情'));
-      if (!anchor) return;
+      
+      // Detect page type and find appropriate anchor
+      let anchor;
+      if (this.isExamPage()) {
+        // Exam page: try multiple selectors
+        anchor = document.querySelector('.marking_content') || 
+                 document.querySelector('.examPaperTitle') ||
+                 document.querySelector('.exam_main') ||
+                 document.querySelector('#examPaperDiv') ||
+                 document.querySelector('.singleQuesId') ||
+                 document.querySelector('body');
+        console.log('[CX] 考试页面，找到锚点:', anchor?.className || anchor?.tagName);
+      } else {
+        // Study page: find "章节详情" header
+        anchor = Array.from(document.querySelectorAll('h2')).find(h => h.textContent?.trim()?.includes('章节详情'));
+      }
+      
+      if (!anchor) {
+        console.log('[CX] 未找到合适的锚点元素');
+        return;
+      }
       
       const btn = document.createElement('button');
       btn.id = '__cx_copy_all_btn';
@@ -118,8 +211,26 @@ const CopyAllQuestion = {
           this.showModal(content);
         } catch (e) { this.toast('收集题目失败，请重试'); }
       });
-      anchor.insertAdjacentElement('afterend', btn);
-    } catch (err) {}
+      
+      // Adjust button positioning based on anchor type
+      if (this.isExamPage() && anchor === document.body) {
+        // Exam page with body anchor: use fixed positioning (top-right corner)
+        btn.style.cssText += ';position:fixed;top:10px;right:20px;';
+        document.body.appendChild(btn);
+        console.log('[CX] 按钮已插入到 body（固定定位）');
+      } else if (this.isExamPage()) {
+        // Exam page with specific anchor: use fixed positioning
+        btn.style.cssText = 'position:fixed;top:10px;right:20px;margin:0;padding:6px 12px;background:#fff;color:#333;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;cursor:pointer;z-index:9999;transition:all 0.2s';
+        document.body.appendChild(btn);
+        console.log('[CX] 按钮已插入到 body（考试页面）');
+      } else {
+        // Default: insert after anchor element
+        anchor.insertAdjacentElement('afterend', btn);
+        console.log('[CX] 按钮已插入到锚点后面');
+      }
+    } catch (err) {
+      console.error('[CX] 插入按钮失败:', err);
+    }
   },
 
 
@@ -236,8 +347,24 @@ const CopyAllQuestion = {
   init() {
     try {
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => { this.injectModal(); this.insertCopyButton(); this.setupMessageHandler(); });
-      } else { this.injectModal(); this.insertCopyButton(); this.setupMessageHandler(); }
+        document.addEventListener('DOMContentLoaded', () => { 
+          this.injectModal(); 
+          // 不再插入页面按钮，改用控制面板
+          // this.insertCopyButton(); 
+          this.setupMessageHandler();
+        });
+      } else { 
+        this.injectModal(); 
+        // 不再插入页面按钮，改用控制面板
+        // this.insertCopyButton(); 
+        this.setupMessageHandler();
+      }
     } catch (err) {}
+  },
+
+  // 重试插入按钮（用于动态加载的页面）
+  // 已废弃：不再使用页面按钮
+  retryInsertButton() {
+    // 功能已移至控制面板
   }
 };

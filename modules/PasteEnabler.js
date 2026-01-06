@@ -102,5 +102,6 @@ const PasteEnabler = {
     this.removeGlobalRestrictions();
     this.enableExistingElements();
     this.startMutationObserver();
+    GlobalLogger.info('粘贴功能已启用');
   }
 };
