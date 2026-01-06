@@ -1,13 +1,10 @@
 // Chaoxing Copy & Paste Helper - Injected Page Script
 // This script runs in the page context to access window.UE (UEditor instances)
-// 
-// 关键说明：
-// Chrome 扩展的 Content Script 运行在"隔离世界"中，无法直接访问页面的全局变量（如 window.UE）
-// 因此需要通过注入 <script> 标签的方式，将此脚本注入到页面上下文中执行
-// 这样就可以像油猴脚本使用 unsafeWindow 一样访问 UE.instants
 
 (function() {
   'use strict';
+
+  const LOG_PREFIX = '[Fk-Chaoxing]';
 
   /**
    * Remove restrictions from a specific element
@@ -93,7 +90,6 @@
   /**
    * Process a single UEditor instance
    * Enables paste functionality and removes restrictions
-   * 完全按照原始油猴脚本的实现
    * @param {Object} instance - UEditor instance object
    */
   function processUEditorInstance(instance) {
@@ -141,15 +137,20 @@
     const maxAttempts = 40; // 增加到 40 次，共 20 秒
     const interval = 500; // ms
     let foundAny = false;
+    let totalInstancesFound = 0;
+
+    // console.log(`${LOG_PREFIX} Starting UEditor monitoring`);
 
     const checkUEditor = () => {
       attempts++;
+      let currentBatchCount = 0;
 
       // 处理主窗口 UEditor 实例
       if (typeof UE !== 'undefined' && UE.instants) {
         const keys = Object.keys(UE.instants);
         if (keys.length > 0) {
           foundAny = true;
+          currentBatchCount += keys.length;
           Object.values(UE.instants).forEach(instance => {
             processUEditorInstance(instance);
           });
@@ -164,6 +165,7 @@
             const keys = Object.keys(iframeWindow.UE.instants);
             if (keys.length > 0) {
               foundAny = true;
+              currentBatchCount += keys.length;
               Object.values(iframeWindow.UE.instants).forEach(instance => {
                 processUEditorInstance(instance);
               });
@@ -173,12 +175,19 @@
           // 跨域 iframe，静默处理
         }
       });
+      
+      if (currentBatchCount > totalInstancesFound) {
+          totalInstancesFound = currentBatchCount;
+      }
 
       // 继续检查直到达到最大尝试次数
       if (attempts < maxAttempts) {
         setTimeout(checkUEditor, interval);
-      } else if (foundAny) {
-        console.log('[CX] UEditor enabled');
+      } else {
+        if (foundAny) {
+          console.log(`${LOG_PREFIX} 已解锁 ${totalInstancesFound} 个 UEditor 编辑器`);
+          window.postMessage({ type: 'CX_UE_UNLOCKED', count: totalInstancesFound }, '*');
+        }
       }
     };
 
@@ -187,7 +196,6 @@
   }
 
   // 启动 UEditor 监控
-  // 与原始脚本一致：如果 DOM 还在加载，等待 DOMContentLoaded
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', monitorUEditor);
   } else {

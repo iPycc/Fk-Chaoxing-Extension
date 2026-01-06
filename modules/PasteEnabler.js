@@ -5,12 +5,21 @@ const PasteEnabler = {
   removeGlobalRestrictions() {
     try {
       const events = ['paste', 'contextmenu', 'selectstart', 'dragstart', 'copy', 'cut', 'keydown'];
+      let count = 0;
       events.forEach(eventType => {
-        try { document[`on${eventType}`] = null; } catch (err) {}
+        try { 
+          if (document[`on${eventType}`]) {
+            document[`on${eventType}`] = null;
+            count++;
+          }
+        } catch (err) {}
       });
       if (document.body) this.removeElementRestrictions(document.body);
-      console.log('[CX] Global restrictions removed');
-    } catch (err) {}
+      
+      // GlobalLogger.info('Global restrictions removed', `Cleared ${count} event handlers`);
+    } catch (err) {
+      // GlobalLogger.warning('Failed to remove global restrictions', err.message);
+    }
   },
 
   // Inject CSS to force user-select
@@ -19,7 +28,10 @@ const PasteEnabler = {
       const style = document.createElement('style');
       style.textContent = `* { user-select: text !important; -webkit-user-select: text !important; -moz-user-select: text !important; -ms-user-select: text !important; }`;
       (document.head || document.documentElement).appendChild(style);
-    } catch (err) {}
+      // GlobalLogger.info('Global styles injected');
+    } catch (err) {
+      // GlobalLogger.error('Failed to inject global styles', err.message);
+    }
   },
 
   // Remove restrictions from element
@@ -39,7 +51,11 @@ const PasteEnabler = {
   // Enable all editable elements
   enableExistingElements() {
     try {
-      document.querySelectorAll('input, textarea, [contenteditable]').forEach(el => this.removeElementRestrictions(el));
+      const elements = document.querySelectorAll('input, textarea, [contenteditable]');
+      elements.forEach(el => this.removeElementRestrictions(el));
+      if (elements.length > 0) {
+        // GlobalLogger.info('Enabled existing elements', `Processed ${elements.length} elements`);
+      }
     } catch (err) {}
   },
 
@@ -94,6 +110,7 @@ const PasteEnabler = {
         }));
       });
       observer.observe(document.documentElement, { childList: true, subtree: true });
+      // GlobalLogger.info('MutationObserver started');
     } catch (err) {}
   },
 
@@ -102,6 +119,10 @@ const PasteEnabler = {
     this.removeGlobalRestrictions();
     this.enableExistingElements();
     this.startMutationObserver();
-    GlobalLogger.info('粘贴功能已启用');
+    
+    // 仅在顶层窗口输出日志，避免 iframe 重复刷屏
+    if (window.self === window.top) {
+      GlobalLogger.info('复制粘贴限制已解除');
+    }
   }
 };

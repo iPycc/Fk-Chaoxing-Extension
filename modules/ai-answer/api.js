@@ -1,6 +1,6 @@
 // DeepSeek API 
 const AIApi = {
-  API_KEY: 'Your-API-KEYS',
+  API_KEY: 'sk-xxxxxxxx',
   MODEL: 'deepseek-chat',
 
   // prompt

@@ -8,7 +8,7 @@ const ContentMessageHandler = {
       this.handleMessage(request, sender, sendResponse);
       return true; // 保持消息通道开启以支持异步响应
     });
-    console.log('[CX] 消息处理器已初始化');
+    // GlobalLogger.info('Message handler initialized');
   },
 
   // 处理消息
@@ -39,7 +39,7 @@ const ContentMessageHandler = {
           sendResponse({ success: false, message: '未知操作' });
       }
     } catch (err) {
-      console.error('[CX] 消息处理失败:', err);
+      GlobalLogger.error('Message handling failed', err.message);
       sendResponse({ success: false, message: err.message });
     }
   },
@@ -48,15 +48,13 @@ const ContentMessageHandler = {
   async handleGetQuestions(sendResponse) {
     try {
       // 仅在顶层窗口处理，避免重复获取
-      if (window.self !== window.top) {
-        return;
-      }
+      if (window.self !== window.top) return;
 
-      GlobalLogger.info('获取题目');
+      // GlobalLogger.info('正在获取题目...');
       
       // 收集题目
-      const content = await CopyAllQuestion.collectAllTitles();
-      const sections = await CopyAllQuestion.collectTitlesFromDocument(document);
+      const content = await QuestionCollector.collectAll();
+      const sections = await QuestionCollector.collectFromDocumentRecursive(document);
       
       // 统计题目数量
       let totalQuestions = 0;
@@ -66,10 +64,7 @@ const ContentMessageHandler = {
         }
       });
 
-      GlobalLogger.success(`获取到 ${totalQuestions} 道题目`);
-
-      // 保存题目数量到全局
-      this.lastQuestionCount = totalQuestions;
+      GlobalLogger.success(`共获取 ${totalQuestions} 道题目`);
 
       sendResponse({
         success: true,
@@ -77,7 +72,7 @@ const ContentMessageHandler = {
         content: content
       });
     } catch (err) {
-      GlobalLogger.error('获取题目失败');
+      GlobalLogger.error('获取题目失败', err.message);
       sendResponse({
         success: false,
         message: '获取题目失败'
@@ -88,13 +83,10 @@ const ContentMessageHandler = {
   // 处理显示弹窗请求
   handleShowModal(request, sendResponse) {
     try {
-      // 仅在顶层窗口显示弹窗
-      if (window.self !== window.top) {
-        return;
-      }
+      if (window.self !== window.top) return;
 
-      // 调用 CopyAllQuestion 的 showModal 方法
-      CopyAllQuestion.showModal(request.content);
+      // 调用 CXModal 显示弹窗
+      CXModal.show(request.content);
       sendResponse({ success: true });
     } catch (err) {
       sendResponse({ success: false, message: err.message });
@@ -104,12 +96,9 @@ const ContentMessageHandler = {
   // 处理 AI 答题请求
   async handleAIAnswer(sendResponse) {
     try {
-      // 仅在顶层窗口处理
-      if (window.self !== window.top) {
-        return;
-      }
+      if (window.self !== window.top) return;
 
-      GlobalLogger.info('开始 AI 答题流程...');
+      // GlobalLogger.info('AI 开始分析');
       
       // 检查 AI 模块是否可用
       if (typeof AIAnswerCore === 'undefined') {
@@ -122,7 +111,7 @@ const ContentMessageHandler = {
       // 获取题目数量
       const questions = await AIAnswerCore.collectQuestions();
       
-      GlobalLogger.success('AI 答题流程完成');
+      // GlobalLogger.success('AI 分析完成');
 
       sendResponse({
         success: true,
@@ -130,7 +119,7 @@ const ContentMessageHandler = {
         message: 'AI 分析完成'
       });
     } catch (err) {
-      GlobalLogger.error('AI 答题失败: ' + err.message);
+      GlobalLogger.error('AI 分析失败', err.message);
       sendResponse({
         success: false,
         message: 'AI 答题失败: ' + err.message
@@ -141,6 +130,9 @@ const ContentMessageHandler = {
   // 处理获取日志请求
   handleGetLogs(sendResponse) {
     try {
+      // 仅返回顶层窗口的日志，防止 iframe 抢答空日志
+      if (window.self !== window.top) return;
+      
       const logs = GlobalLogger.getAllLogs();
       sendResponse({
         success: true,
@@ -157,22 +149,16 @@ const ContentMessageHandler = {
   // 处理获取题目数量请求
   async handleGetQuestionCount(sendResponse) {
     try {
-      // 仅在顶层窗口处理
-      if (window.self !== window.top) {
-        return;
-      }
+      if (window.self !== window.top) return;
 
-      // 实时获取题目数量，不再依赖缓存
-      const sections = await CopyAllQuestion.collectTitlesFromDocument(document);
+      // 实时获取题目数量
+      const sections = await QuestionCollector.collectFromDocumentRecursive(document);
       let totalQuestions = 0;
       sections.forEach(section => {
         if (section.questions) {
           totalQuestions += section.questions.length;
         }
       });
-
-      // 更新缓存
-      this.lastQuestionCount = totalQuestions;
 
       sendResponse({
         success: true,
@@ -184,10 +170,7 @@ const ContentMessageHandler = {
         message: err.message
       });
     }
-  },
-
-  // 存储上次获取的题目数量
-  lastQuestionCount: 0
+  }
 };
 
 // 初始化消息处理器

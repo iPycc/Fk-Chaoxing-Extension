@@ -12,16 +12,19 @@ const UEditorUnlock = {
       const parent = document.head || document.documentElement;
       if (parent) {
         parent.appendChild(script);
+        // GlobalLogger.info('Injected UEditor unlock script');
       } else {
         document.addEventListener('DOMContentLoaded', () => {
           (document.head || document.documentElement).appendChild(script);
+          // GlobalLogger.info('Injected UEditor unlock script (delayed)');
         }, { once: true });
       }
-    } catch (err) {}
+    } catch (err) {
+      // GlobalLogger.error('Failed to inject UEditor unlock script', err.message);
+    }
   },
 
   init() {
     this.injectPageScript();
-    // 移除日志 - 太详细
   }
 };

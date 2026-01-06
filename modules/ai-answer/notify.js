@@ -167,7 +167,6 @@ const AINotify = {
 
   // 添加日志
   log(message, type = 'info') {
-    if (!this.isMainPage()) return;
     if (!this.logsContainer) this.init();
     if (!this.logsContainer) return;
     

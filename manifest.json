@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Chaoxing Copy & Paste Helper",
-  "version": "1.3.1",
-  "description": "Enable copy, paste and text extraction on Chaoxing with AI answers",
+  "name": "Fk-Chaoxing",
+  "version": "1.3.2",
+  "description": "解除复制粘贴限制、自动提取题目并支持 AI 一键答题，专为超星学习通优化",
   "permissions": ["clipboardWrite", "scripting", "storage"],
   "host_permissions": ["*://*.chaoxing.com/*", "https://api.deepseek.com/*"],
   "action": {
@@ -22,9 +22,13 @@
       "js": [
         "assets/TyprMd5.js",
         "modules/logger.js",
+        "modules/ui/Toast.js",
+        "modules/ui/Modal.js",
+        "modules/extractors/HomeworkExtractor.js",
+        "modules/extractors/ExamExtractor.js",
+        "modules/services/QuestionCollector.js",
         "modules/PasteEnabler.js",
         "modules/CopyEnabler.js",
-        "modules/CopyAllQuestion.js",
         "modules/UEditorUnlock.js",
         "modules/ai-answer/notify.js",
         "modules/ai-answer/api.js",
@@ -32,7 +36,7 @@
         "modules/ai-answer/core.js",
         "modules/ai-answer/index.js",
         "content-message-handler.js",
-        "fk-cx-main.js"
+        "content.js"
       ],
       "css": ["modules/ai-answer/notify.css"],
       "run_at": "document_start",

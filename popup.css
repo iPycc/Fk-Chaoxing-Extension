@@ -221,7 +221,6 @@ body {
 
 .action-card:hover {
   border-color: var(--text-secondary);
-  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 
@@ -237,6 +236,7 @@ body {
 
 .action-card.dark:hover {
   background: #1a1a1a; /* 稍微浅一点的黑色 */
+  transform: none; /* 取消悬停时的位移动画 */
 }
 
 .action-card.dark .action-desc {
@@ -434,6 +434,18 @@ body {
 }
 
 .action-card.loading .action-icon {
-  animation: spin 1s linear infinite;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 标准圆形加载动画 */
+.loader {
   display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.6);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }

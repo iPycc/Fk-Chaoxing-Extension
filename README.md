@@ -1,85 +1,101 @@
-# Chaoxing Copy & Paste Helper
+# Fk-Chaoxing
 
-## 📋 项目简介
+Chrome 扩展，为超星学习通提供一键复制、字体解密、AI 答题等能力。基于 Manifest V3，全部逻辑在内容脚本中运行，零后端依赖。
 
-Chaoxing Copy & Paste Helper 是一个专为超星学习通（Chaoxing）平台设计的 Chrome 浏览器扩展。它旨在通过技术手段解除页面上的交互限制，提供便捷的题目提取和 AI 辅助答题功能，从而提升学习效率。
+---
 
-本项目基于 Chrome Extension Manifest V3 规范开发，采用原生 JavaScript (ES6+) 实现，无外部框架依赖，确保轻量级和高性能。
+## 功能一览
+- **一键提取**：自动收集主文档 + iframe 中的作业/考试题目，弹窗预览并写入剪贴板
+- **AI 答题**：调用外部 API，右下角悬浮面板逐题返回答案
+- **解除限制**：破解复制/粘贴禁用、富文本编辑器限制、字体加密混淆
+- **极简 UI**：黑白主题 + Google Fonts + RemixIcon，Popup 即用完走
 
-## 🛠️ 核心功能与技术实现
+---
 
-### 1. 解除页面交互限制
-- **事件拦截与移除**：通过在 `document_start` 阶段注入 Content Script，利用 Event Capture 机制拦截并阻止 `paste`, `copy`, `cut`, `contextmenu`, `selectstart` 等事件的默认行为和冒泡，从而解除网页对复制、粘贴和右键菜单的封锁。
-- **CSS 注入**：动态注入 CSS 规则（`user-select: auto !important`），覆盖页面原有的样式限制，恢复文本选择功能。
-- **UEditor 解锁**：针对页面中使用的百度 UEditor 富文本编辑器，通过注入脚本（`injected.js`）访问页面上下文中的 `UE` 对象，移除其对粘贴事件的拦截逻辑，恢复编辑器的原生粘贴功能。
+## 技术栈
+- Manifest V3
+- 原生 ES Module（无打包）
+- Shadow DOM 隔离样式
+- MutationObserver + postMessage 跨 iframe 通信
+- Google Fonts / RemixIcon CDN
 
-### 2. 智能题目提取引擎
-- **多模式 DOM 解析**：
-  - **作业模式**：解析 `.TiMu`、`.Zy_TItle` 等选择器，提取作业页面中的题目文本和选项。
-  - **考试模式**：针对考试页面特殊的 DOM 结构（如 `.singleQuesId`, `.examPaperTitle`），实现了专门的解析算法，支持单选、多选、判断和简答题的提取。
-- **跨域 Iframe 通信**：由于超星页面常采用嵌套 Iframe 结构，扩展实现了基于 `postMessage` 的通信机制。主页面（Top Frame）作为控制器，向所有子 Iframe 广播采集指令，子 Iframe 独立采集数据后回传，最终在主页面汇总，解决跨域访问限制问题。
+---
 
-### 3. AI 辅助答题
-- **DeepSeek API 集成**：内置 DeepSeek AI 接口集成，将提取的题目上下文发送至 AI 模型进行分析。
-- **流式处理**：支持长文本和批量题目的处理，通过优化 Prompt Engineering 提高 AI 对题型的识别率和答案准确性。
-- **非侵入式 UI**：AI 答题结果通过独立的浮动面板或 Popup 界面展示，不破坏原有页面布局。
+## 架构
 
-### 4. 现代化 Popup 控制面板
-- **实时状态监控**：打开扩展面板时，立即通过 Content Script 扫描当前页面 DOM，实时统计并显示题目数量。
-- **智能页面检测**：根据 URL 特征（如 `/exam-ans/`, `/mycourse/`）自动识别当前是“考试页面”、“作业页面”还是“普通页面”，并动态调整 UI 状态（图标、颜色）。
-- **极简 UI 设计**：采用黑白简约主题，引入 Nunito 和 Noto Sans SC 字体，配合 RemixIcon 图标库，提供现代化的视觉体验。
-
-## 📦 安装与使用
-
-1.  **下载源码**：克隆或下载本项目到本地。
-2.  **加载扩展**：
-    *   在 Chrome 浏览器地址栏输入 `chrome://extensions/`。
-    *   开启右上角的“开发者模式”。
-    *   点击“加载已解压的扩展程序”，选择本项目文件夹。
-3.  **使用功能**：
-    *   打开超星学习通的作业或考试页面。
-    *   点击浏览器工具栏的扩展图标，打开控制面板。
-    *   **获取题目**：点击“获取题目”按钮，将自动提取当前页面的所有题目并复制到剪贴板，同时弹窗预览。
-    *   **AI 答题**：点击“AI 答题”按钮，扩展将自动提取题目并调用 AI 接口获取答案。
-
-## 📂 项目结构
-
-```text
-Fk-Chaoxing-Extension/
-├── manifest.json              # 扩展配置文件 (Manifest V3)
-├── background.js              # Service Worker，处理后台任务
-├── popup.html                 # 扩展弹出层 HTML
-├── popup.css                  # 弹出层样式表
-├── popup.js                   # 弹出层交互逻辑
-├── content-message-handler.js # Content Script 消息路由与处理
-├── fk-cx-main.js              # Content Script 入口文件
-├── injected.js                # 页面注入脚本（用于访问页面上下文对象）
-├── modules/                   # 功能模块目录
-│   ├── CopyAllQuestion.js     # 题目提取核心逻辑
-│   ├── CopyEnabler.js         # 复制限制解除模块
-│   ├── PasteEnabler.js        # 粘贴限制解除模块
-│   ├── UEditorUnlock.js       # UEditor 解锁模块
-│   ├── logger.js              # 全局日志工具
-│   └── ai-answer/             # AI 答题相关模块
-│       ├── api.js             # API 通信层
-│       ├── core.js            # 核心业务逻辑
-│       └── ui.js              # AI 结果展示 UI
-├── assets/                    # 静态资源
-│   └── TyprMd5.js             # 字体解密工具（如有）
-└── icons/                     # 图标资源
+```
+┌─ background.js          # 生命周期管理
+├─ popup/               # 弹窗 UI（极简黑白主题）
+│  ├─ popup.html
+│  ├─ popup.css
+│  └─ popup.js
+├─ content-message-handler.js  # 统一消息路由（仅 top 帧响应）
+├─ fk-cx-main.js        # 内容脚本入口，按阶段初始化模块
+├─ modules/
+│  ├─ logger.js         # 全局日志，支持 iframe → top 聚合
+│  ├─ ui/               # 可复用组件
+│  │  ├─ Modal.js       # 题目预览弹窗（内联样式 + Google Fonts）
+│  │  └─ Toast.js       # 轻提示
+│  ├─ extractors/       # 策略模式抽取器
+│  │  ├─ HomeworkExtractor.js
+│  │  └─ ExamExtractor.js
+│  ├─ services/       # 业务聚合
+│  │  └─ QuestionCollector.js  # 递归收集主文档与 iframe
+│  ├─ ai-answer/       # AI 答题子系统
+│  │  ├─ index.js     # 初始化（不再注入按钮）
+│  │  ├─ core.js      # 题目收集 → AI 调用 → 结果展示
+│  │  ├─ ui.js        # 空壳，按钮逻辑已移除
+│  │  ├─ notify.js    # 右下角悬浮通知 + 面板
+│  │  └─ notify.css   # 面板样式
+│  ├─ PasteEnabler.js   # 破解粘贴限制
+│  ├─ CopyEnabler.js    # 字体解密 + 复制增强
+│  └─ UEditorUnlock.js  # 富文本编辑器解锁
+└─ injected.js        # 注入页面上下文，获取 window.UE
 ```
 
-## 🛠️ 技术栈
+---
 
-*   **Core**: JavaScript (ES6+), HTML5, CSS3
-*   **Platform**: Chrome Extension API (Manifest V3)
-*   **UI Assets**: RemixIcon, Google Fonts (Nunito, Noto Sans SC)
-*   **AI Service**: DeepSeek API
+## 核心流程
 
-## 📝 更新日志
+### 1. 题目提取
+- `popup` 发送 `getQuestions` → `content-message-handler`（仅 top 帧响应）
+- `QuestionCollector.collectFromDocumentRecursive` 并行扫描主文档与同级 iframe
+- 按页面类型选择 `HomeworkExtractor` 或 `ExamExtractor` 策略
+- 结果经 `CXModal` 展示，同时写入剪贴板
 
-请查看 [CHANGELOG.md](./CHANGELOG.md) 获取详细的版本更新记录。
+### 2. AI 答题
+- `popup` 发送 `aiAnswer` → `content-message-handler`
+- `AIAnswerCore.processAllQuestions()` 复用同一套题目收集逻辑
+- 调用外部 AI API，解析返回后通过 `AINotify` 面板逐题展示
+- 全程日志通过 `GlobalLogger` 汇总到 top 帧，popup 实时读取
 
-## ⚠️ 免责声明
+### 3. 跨 iframe 日志聚合
+- 每帧维护自己的日志数组
+- `postMessage({type:'CX_LOG_SYNC', logs})` 主动推送到 top
+- top 帧合并后供 popup 一次性拉取，解决关闭再开日志丢失问题
 
-本项目仅供技术研究和学习交流使用。请勿用于任何商业用途或违反相关平台规定的行为。使用本插件产生的任何后果由用户自行承担。
+---
+
+## 更新记录（精简）
+
+- **v1.3.2** 文案与 manifest 中文化
+- **v1.3.1** 重构完成
+  - 模块化拆分：ui / extractors / services / ai-answer
+  - 移除页面固定按钮，全部功能收拢到 popup
+  - 统一日志格式与跨帧聚合
+  - 黑白极简 UI，Google Fonts + RemixIcon
+  - 修复 iframe 重复弹窗 & AI 在考试页面不可用
+
+- **v1.2 及更早** 见 [CHANGELOG.md](CHANGELOG.md)
+
+---
+
+## 本地开发
+1. 克隆仓库 → Chrome「加载已解压的扩展」→ 选择根目录
+2. 修改任意模块后，点击「重载扩展」按钮即可热更新
+3. 控制台过滤 `[Fk-Chaoxing]` 查看结构化日志
+
+---
+
+## 许可证
+MIT

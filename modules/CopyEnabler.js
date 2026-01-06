@@ -4,26 +4,41 @@ const CopyEnabler = {
   // Main decryption function
   async decrypt() {
     try {
-      GlobalLogger.info('解密复制保护');
+      // GlobalLogger.info('Starting font decryption');
+      
       const styleElement = this.findStyleContaining('font-cxsecret');
-      if (!styleElement) return;
+      if (!styleElement) {
+        // GlobalLogger.info('No encrypted fonts found');
+        return;
+      }
 
       const fontMatch = styleElement.textContent.match(/base64,([\w\W]+?)'/);
-      if (!fontMatch) return;
+      if (!fontMatch) {
+        // GlobalLogger.warning('Encrypted font style found but no base64 data');
+        return;
+      }
 
       const fontData = Typr.parse(this.base64ToUint8Array(fontMatch[1]))[0];
       
       const tableUrl = chrome.runtime.getURL('assets/table.json');
       const response = await fetch(tableUrl);
-      if (!response.ok) return;
+      if (!response.ok) {
+        throw new Error('Failed to load mapping table');
+      }
       const table = await response.json();
       
       const charMap = this.createCharMap(fontData, table);
-      GlobalLogger.success('复制保护已解除');
-      this.replaceEncryptedText(charMap);
+      const count = Object.keys(charMap).length;
       
-      console.log(`[CX] Decrypted ${Object.keys(charMap).length} chars`);
-    } catch (error) {}
+      // GlobalLogger.info('Font map created', `Mapped ${count} characters`);
+      
+      const replacedCount = this.replaceEncryptedText(charMap);
+      
+      GlobalLogger.success(`已解密 ${count} 个字体文件，替换 ${replacedCount} 处文本`);
+
+    } catch (error) {
+      GlobalLogger.error('字体解密失败', error.message);
+    }
   },
 
   // Find style element containing text
@@ -54,13 +69,19 @@ const CopyEnabler = {
 
   // Replace encrypted text in elements
   replaceEncryptedText(charMap) {
-    document.querySelectorAll('.font-cxsecret').forEach(element => {
+    const elements = document.querySelectorAll('.font-cxsecret');
+    let count = 0;
+    
+    elements.forEach(element => {
       let html = element.innerHTML;
       Object.entries(charMap).forEach(([enc, dec]) => {
         html = html.replace(new RegExp(enc, 'g'), dec);
       });
       element.innerHTML = html;
       element.classList.remove('font-cxsecret');
+      count++;
     });
+    
+    return count;
   }
 };

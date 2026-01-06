@@ -123,9 +123,10 @@ class PopupController {
     
     btn.disabled = true;
     btn.classList.add('loading');
-    icon.className = 'ri-loader-4-line spin-animation';
+    icon.className = '';
+    icon.innerHTML = '<span class="loader"></span>';
     
-    this.log('info', '正在获取题目...');
+    // this.log('info', '正在获取题目...');
 
     try {
       const result = await chrome.tabs.sendMessage(this.currentTab.id, {
@@ -134,7 +135,7 @@ class PopupController {
 
       if (result.success) {
         this.questionCountEl.textContent = result.count;
-        this.log('success', `获取到 ${result.count} 道题目`);
+        this.log('success', `共获取 ${result.count} 道题目`);
         
         // 显示题目预览弹窗（不是直接复制）
         await chrome.tabs.sendMessage(this.currentTab.id, {
@@ -150,6 +151,7 @@ class PopupController {
       btn.disabled = false;
       btn.classList.remove('loading');
       icon.className = originalIconClass;
+      icon.innerHTML = '';
     }
   }
 
@@ -161,13 +163,14 @@ class PopupController {
     
     btn.disabled = true;
     btn.classList.add('loading');
-    icon.className = 'ri-loader-4-line spin-animation';
+    icon.className = '';
+    icon.innerHTML = '<span class="loader"></span>';
     
-    this.log('info', '开始 AI 答题流程...');
+    // this.log('info', '开始 AI 答题流程...');
 
     try {
       // 先获取题目
-      this.log('info', '步骤 1/2: 获取题目');
+      // this.log('info', '步骤 1/2: 获取题目');
       const result = await chrome.tabs.sendMessage(this.currentTab.id, {
         action: 'getQuestions'
       });
@@ -178,23 +181,23 @@ class PopupController {
       }
 
       this.questionCountEl.textContent = result.count;
-      this.log('success', `获取到 ${result.count} 道题目`);
+      // this.log('success', `获取到 ${result.count} 道题目`);
 
       // 复制到剪贴板
       if (result.content) {
         await navigator.clipboard.writeText(result.content);
-        this.log('success', '题目已复制到剪贴板');
+        // this.log('success', '题目已复制到剪贴板');
       }
 
       // 调用 AI
-      this.log('info', '步骤 2/2: 调用 AI 分析');
+      // this.log('info', '步骤 2/2: 调用 AI 分析');
       const aiResult = await chrome.tabs.sendMessage(this.currentTab.id, {
         action: 'aiAnswer'
       });
 
       if (aiResult.success) {
-        this.log('success', 'AI 分析完成');
-        this.log('info', `获取到 ${aiResult.answerCount} 个答案`);
+        // this.log('success', 'AI 分析完成');
+        // this.log('info', `获取到 ${aiResult.answerCount} 个答案`);
       } else {
         this.log('error', aiResult.message || 'AI 分析失败');
       }
@@ -205,6 +208,7 @@ class PopupController {
       btn.disabled = false;
       btn.classList.remove('loading');
       icon.className = originalIconClass;
+      icon.innerHTML = '';
     }
   }
 

@@ -7,7 +7,7 @@ const AIAnswerHelper = {
       if (AIAnswerUI.shouldShowUI()) {
         AINotify.init();
         AIAnswerUI.injectStyles();
-        GlobalLogger.info('AI 答题助手已加载');
+        // GlobalLogger.info('AI 答题助手已加载');
       }
     } catch (err) {
       GlobalLogger.error('AI 初始化失败');
