@@ -3,23 +3,57 @@
 class PopupController {
   constructor() {
     this.logContainer = document.getElementById('log-content');
-    this.pageTypeEl = document.getElementById('page-type');
-    this.statusIconEl = document.getElementById('status-icon');
-    this.statusIconBgEl = document.getElementById('status-icon-bg');
-    this.questionCountEl = document.getElementById('question-count');
+    this.pageTitleEl = document.getElementById('page-title');
+    this.pageUrlEl = document.getElementById('page-url');
+    this.pageFaviconEl = document.getElementById('page-favicon');
+    this.pluginToggleEl = document.getElementById('plugin-toggle');
+    
+    this.btnExtractAuto = document.getElementById('btn-extract-auto');
+    this.btnAiAnswer = document.getElementById('btn-ai-answer');
+    
     this.currentTab = null;
+    this.isEnabled = true;
     
     this.init();
   }
 
   async init() {
     this.log('info', '控制面板已加载');
+    await this.loadPluginState();
     await this.getCurrentTab();
     await this.detectPageType();
     await this.loadInitialLogs();
     await this.updateQuestionCount();
     this.bindEvents();
     this.startLogListener();
+  }
+
+  // 加载插件开关状态
+  async loadPluginState() {
+    const data = await chrome.storage.local.get('pluginEnabled');
+    this.isEnabled = data.pluginEnabled !== false;
+    this.pluginToggleEl.checked = this.isEnabled;
+    this.updateButtonsState();
+  }
+
+  // 切换插件开关状态
+  async togglePluginState() {
+    this.isEnabled = this.pluginToggleEl.checked;
+    await chrome.storage.local.set({ pluginEnabled: this.isEnabled });
+    this.log(this.isEnabled ? 'success' : 'warning', `插件已${this.isEnabled ? '开启' : '临时关闭'}，刷新页面生效`);
+    this.updateButtonsState();
+    
+    // 如果想要立即生效并重载当前页面，可以取消下面的注释
+    // if (this.currentTab) {
+    //   chrome.tabs.reload(this.currentTab.id);
+    // }
+  }
+
+  // 更新按钮状态
+  updateButtonsState() {
+    const disabled = !this.isEnabled;
+    this.btnExtractAuto.disabled = disabled;
+    this.btnAiAnswer.disabled = disabled;
   }
 
   // 获取当前标签页
@@ -29,68 +63,66 @@ class PopupController {
     return tab;
   }
 
+  // 设置插件图标徽章 (气泡)
+  async setBadgeText(text) {
+    if (!this.currentTab) return;
+    try {
+      await chrome.action.setBadgeText({
+        text: text.toString(),
+        tabId: this.currentTab.id
+      });
+      await chrome.action.setBadgeBackgroundColor({
+        color: '#f53f3f', // 红色背景比较醒目
+        tabId: this.currentTab.id
+      });
+    } catch (err) {
+      console.error('设置 Badge 失败', err);
+    }
+  }
+
   // 检测页面类型
   async detectPageType() {
     if (!this.currentTab) return;
 
     const url = this.currentTab.url;
-    let color = '#999';
-    let text = '非超星页面';
-    let iconClass = 'ri-close-circle-line';
-    let bgClass = '';
+    const title = this.currentTab.title || '未知页面';
+    const faviconUrl = this.currentTab.favIconUrl;
+
+    // 显示真实页面信息
+    this.pageTitleEl.textContent = title;
+    this.pageUrlEl.textContent = new URL(url).hostname || url;
     
+    if (faviconUrl) {
+      this.pageFaviconEl.src = faviconUrl;
+    } else {
+      this.pageFaviconEl.src = 'icons/chaoxing.png';
+    }
+
     if (url.includes('/exam-ans/mooc2/exam/preview')) {
-      text = '考试页面';
-      color = '#722ed1';
-      iconClass = 'ri-edit-circle-line';
-      bgClass = 'exam-bg';
       this.log('info', '检测到考试页面');
     } else if (url.includes('/mycourse/studentstudy')) {
-      text = '作业页面';
-      color = '#1677ff';
-      iconClass = 'ri-book-read-line';
-      bgClass = 'work-bg';
-      this.log('info', '检测到作业页面');
+      this.log('info', '检测到作业/章节页面');
     } else if (url.includes('chaoxing.com')) {
-      text = '超星页面';
-      color = '#52c41a';
-      iconClass = 'ri-global-line';
-      bgClass = 'other-bg';
       this.log('info', '检测到超星页面');
     } else {
       this.log('warning', '当前不是超星页面');
-    }
-
-    this.pageTypeEl.textContent = text;
-    this.pageTypeEl.style.color = color;
-    
-    if (this.statusIconEl) {
-      this.statusIconEl.className = iconClass;
-      this.statusIconEl.style.color = color;
-      
-      // 移除之前的 spin 动画
-      this.statusIconEl.classList.remove('spin-animation');
-    }
-    
-    if (this.statusIconBgEl) {
-      this.statusIconBgEl.style.backgroundColor = color + '1A'; // 10% 透明度
     }
   }
 
   // 绑定事件
   bindEvents() {
-    // 重载扩展
-    document.getElementById('btn-reload').addEventListener('click', () => {
-      this.reloadExtension();
+    // 软关闭开关
+    this.pluginToggleEl.addEventListener('change', () => {
+      this.togglePluginState();
     });
 
-    // 获取所有题目
-    document.getElementById('btn-get-questions').addEventListener('click', () => {
+    // 自动获取题目
+    this.btnExtractAuto.addEventListener('click', () => {
       this.getQuestions();
     });
 
     // AI 答题
-    document.getElementById('btn-ai-answer').addEventListener('click', () => {
+    this.btnAiAnswer.addEventListener('click', () => {
       this.aiAnswer();
     });
 
@@ -100,116 +132,99 @@ class PopupController {
     });
   }
 
-  // 重载扩展
-  async reloadExtension() {
-    this.log('info', '正在重载扩展...');
-    const btn = document.getElementById('btn-reload');
-    const icon = btn.querySelector('i');
-    icon.classList.add('spin-animation');
-    
-    try {
-      chrome.runtime.reload();
-    } catch (err) {
-      this.log('error', '重载失败: ' + err.message);
-      icon.classList.remove('spin-animation');
-    }
-  }
-
-  // 获取所有题目
+  // 自动获取题目
   async getQuestions() {
-    const btn = document.getElementById('btn-get-questions');
-    const icon = btn.querySelector('.action-icon i');
+    if (!this.isEnabled) return;
+    
+    const icon = this.btnExtractAuto.querySelector('i');
     const originalIconClass = icon.className;
     
-    btn.disabled = true;
-    btn.classList.add('loading');
+    this.btnExtractAuto.disabled = true;
     icon.className = '';
     icon.innerHTML = '<span class="loader"></span>';
     
-    // this.log('info', '正在获取题目...');
-
     try {
-      const result = await chrome.tabs.sendMessage(this.currentTab.id, {
-        action: 'getQuestions'
-      });
+      chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' }, async (result) => {
+        if (chrome.runtime.lastError) {
+          this.log('error', '获取题目失败 (请刷新页面后重试)');
+          this.resetExtractButton(icon, originalIconClass);
+          return;
+        }
 
-      if (result.success) {
-        this.questionCountEl.textContent = result.count;
-        this.log('success', `共获取 ${result.count} 道题目`);
+        if (result && result.success) {
+          this.setBadgeText(result.count);
+          this.log('success', `共获取 ${result.count} 道题目`);
+          
+          await chrome.tabs.sendMessage(this.currentTab.id, {
+            action: 'showQuestionModal',
+            content: result.content
+          });
+        } else if (result) {
+          this.log('error', result.message || '获取题目失败');
+        }
         
-        // 显示题目预览弹窗（不是直接复制）
-        await chrome.tabs.sendMessage(this.currentTab.id, {
-          action: 'showQuestionModal',
-          content: result.content
-        });
-      } else {
-        this.log('error', result.message || '获取题目失败');
-      }
+        this.resetExtractButton(icon, originalIconClass);
+      });
     } catch (err) {
-      this.log('error', '获取题目失败');
-    } finally {
-      btn.disabled = false;
-      btn.classList.remove('loading');
-      icon.className = originalIconClass;
-      icon.innerHTML = '';
+      this.log('error', '获取题目失败 (请刷新页面后重试)');
+      this.resetExtractButton(icon, originalIconClass);
     }
+  }
+
+  // 重置提取按钮状态
+  resetExtractButton(icon, originalIconClass) {
+    if (this.isEnabled) this.btnExtractAuto.disabled = false;
+    icon.className = originalIconClass;
+    icon.innerHTML = '';
   }
 
   // AI 答题
   async aiAnswer() {
-    const btn = document.getElementById('btn-ai-answer');
-    const icon = btn.querySelector('.action-icon i');
+    if (!this.isEnabled) return;
+    
+    const btn = this.btnAiAnswer;
+    const icon = btn.querySelector('i');
     const originalIconClass = icon.className;
     
     btn.disabled = true;
-    btn.classList.add('loading');
     icon.className = '';
     icon.innerHTML = '<span class="loader"></span>';
-    
-    // this.log('info', '开始 AI 答题流程...');
 
     try {
-      // 先获取题目
-      // this.log('info', '步骤 1/2: 获取题目');
-      const result = await chrome.tabs.sendMessage(this.currentTab.id, {
-        action: 'getQuestions'
+      chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' }, async (result) => {
+        if (chrome.runtime.lastError || !result || !result.success) {
+          this.log('error', '获取题目失败');
+          this.resetAiButton(btn, icon, originalIconClass);
+          return;
+        }
+
+        this.setBadgeText(result.count);
+
+        if (result.content) {
+          await navigator.clipboard.writeText(result.content);
+        }
+
+        const aiResult = await chrome.tabs.sendMessage(this.currentTab.id, {
+          action: 'aiAnswer'
+        });
+
+        if (!aiResult.success) {
+          this.log('error', aiResult.message || 'AI 分析失败');
+        }
+        
+        this.resetAiButton(btn, icon, originalIconClass);
       });
-
-      if (!result.success) {
-        this.log('error', '获取题目失败');
-        return;
-      }
-
-      this.questionCountEl.textContent = result.count;
-      // this.log('success', `获取到 ${result.count} 道题目`);
-
-      // 复制到剪贴板
-      if (result.content) {
-        await navigator.clipboard.writeText(result.content);
-        // this.log('success', '题目已复制到剪贴板');
-      }
-
-      // 调用 AI
-      // this.log('info', '步骤 2/2: 调用 AI 分析');
-      const aiResult = await chrome.tabs.sendMessage(this.currentTab.id, {
-        action: 'aiAnswer'
-      });
-
-      if (aiResult.success) {
-        // this.log('success', 'AI 分析完成');
-        // this.log('info', `获取到 ${aiResult.answerCount} 个答案`);
-      } else {
-        this.log('error', aiResult.message || 'AI 分析失败');
-      }
     } catch (err) {
       this.log('error', 'AI 答题失败: ' + err.message);
-      this.log('warning', '请确保当前页面是超星学习通页面');
-    } finally {
-      btn.disabled = false;
-      btn.classList.remove('loading');
-      icon.className = originalIconClass;
-      icon.innerHTML = '';
+      this.resetAiButton(btn, icon, originalIconClass);
     }
+  }
+
+  // 重置 AI 按钮状态
+  resetAiButton(btn, icon, originalIconClass) {
+    if (this.isEnabled) btn.disabled = false;
+    icon.className = originalIconClass;
+    icon.innerHTML = '';
   }
 
   // 清空日志
@@ -227,18 +242,14 @@ class PopupController {
       <span class="log-msg">${message}</span>
     `;
     
-    // 如果是第一条日志且是默认消息，则替换
     if (this.logContainer.children.length === 1 && 
         this.logContainer.children[0].textContent.includes('等待操作')) {
       this.logContainer.innerHTML = '';
     }
     
     this.logContainer.appendChild(logItem);
-    
-    // 自动滚动到底部
     this.logContainer.scrollTop = this.logContainer.scrollHeight;
 
-    // 限制日志数量
     while (this.logContainer.children.length > 50) {
       this.logContainer.removeChild(this.logContainer.firstChild);
     }
@@ -252,10 +263,7 @@ class PopupController {
       });
 
       if (result.success && result.logs && result.logs.length > 0) {
-        // 清空默认日志
         this.logContainer.innerHTML = '';
-        
-        // 添加所有历史日志
         result.logs.forEach(log => {
           const logItem = document.createElement('div');
           logItem.className = `log-item ${log.type}`;
@@ -265,25 +273,25 @@ class PopupController {
           `;
           this.logContainer.appendChild(logItem);
         });
-        
-        // 滚动到底部
         this.logContainer.scrollTop = this.logContainer.scrollHeight;
       }
     } catch (err) {
-      // 页面可能还未加载完成，忽略错误
+      // 页面可能未加载完成
     }
   }
 
   // 更新题目数量
   async updateQuestionCount() {
     try {
-      const result = await chrome.tabs.sendMessage(this.currentTab.id, {
-        action: 'getQuestionCount'
+      // 尝试向所有 frame 发送消息获取最新状态，直到拿到一个有效数字
+      chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestionCount' }, (result) => {
+        if (chrome.runtime.lastError) {
+          return;
+        }
+        if (result && result.success && result.count !== undefined && result.count > 0) {
+          this.setBadgeText(result.count);
+        }
       });
-
-      if (result.success && result.count !== undefined) {
-        this.questionCountEl.textContent = result.count;
-      }
     } catch (err) {
       // 忽略错误
     }
@@ -293,26 +301,7 @@ class PopupController {
   startLogListener() {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.action === 'log' && request.log) {
-        const logItem = document.createElement('div');
-        logItem.className = `log-item ${request.log.type}`;
-        logItem.innerHTML = `
-          <span class="log-time">${request.log.time}</span>
-          <span class="log-msg">${request.log.message}</span>
-        `;
-        
-        // 如果是第一条日志且是默认消息，则替换
-        if (this.logContainer.children.length === 1 && 
-            this.logContainer.children[0].textContent.includes('等待操作')) {
-          this.logContainer.innerHTML = '';
-        }
-        
-        this.logContainer.appendChild(logItem);
-        this.logContainer.scrollTop = this.logContainer.scrollHeight;
-
-        // 限制日志数量
-        while (this.logContainer.children.length > 50) {
-          this.logContainer.removeChild(this.logContainer.firstChild);
-        }
+        this.log(request.log.type, request.log.message);
       }
     });
   }

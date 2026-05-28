@@ -4,8 +4,8 @@ const QuestionCollector = {
   extractors: [ExamExtractor, HomeworkExtractor],
 
   // Get appropriate extractor for current page
-  getExtractor() {
-    const url = window.location.href;
+  getExtractor(doc = document) {
+    const url = doc.location?.href || doc.defaultView?.location?.href || window.location.href;
     return this.extractors.find(e => e.canHandle(url)) || HomeworkExtractor; // Default to homework
   },
 
@@ -21,7 +21,7 @@ const QuestionCollector = {
     const header = this.findHeaderTitle(doc) || doc.title || '';
     
     // Extract from current document
-    const extractor = this.getExtractor();
+    const extractor = this.getExtractor(doc);
     const questions = extractor.extract(doc);
     
     if (questions.length) {
@@ -82,6 +82,8 @@ const QuestionCollector = {
 
   // Helper: Find header title
   findHeaderTitle(doc) {
+    const workTitle = doc.querySelector('h2.mark_title');
+    if (workTitle?.textContent) return workTitle.textContent.trim();
     const h3 = doc.querySelector('.ceyan_name h3');
     if (h3?.textContent) return h3.textContent.trim();
     const testName = doc.querySelector('.newTestTitle .TestTitle_name');
@@ -117,7 +119,7 @@ const QuestionCollector = {
       // Security check
       // if (!/chaoxing\.com$/.test(new URL(e.origin).hostname || '')) return;
 
-      const extractor = this.getExtractor();
+      const extractor = this.getExtractor(document);
       const questions = extractor.extract(document);
       
       e.source?.postMessage({

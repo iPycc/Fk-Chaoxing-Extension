@@ -25,6 +25,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: false, error: error.message });
       });
     return true; // 保持消息通道开放
+  } else if (request.action === 'updateBadge') {
+    // 允许 content script 触发徽章更新
+    try {
+      if (sender.tab && sender.tab.id) {
+        chrome.action.setBadgeText({
+          text: request.count.toString(),
+          tabId: sender.tab.id
+        });
+        chrome.action.setBadgeBackgroundColor({
+          color: '#f53f3f', // 红色背景比较醒目
+          tabId: sender.tab.id
+        });
+        sendResponse({ success: true });
+      }
+    } catch (e) {
+      log.error('Update badge error: ' + e.message);
+    }
   }
 });
 

@@ -1,37 +1,32 @@
-/* 浮动通知面板样式 */
+/* 浮动通知面板样式 (遵循 frontend-design 规范) */
 #ai-notify-panel {
   position: fixed;
-  width: 360px;
+  width: 320px;
   height: 400px;
   min-width: 280px;
   min-height: 200px;
   max-width: 90vw;
   max-height: 80vh;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e8e8e8;
+  background: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #eaeaea;
   z-index: 10001;
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', 'Noto Sans SC', sans-serif;
   overflow: hidden;
   resize: both;
-  transition: box-shadow 0.2s;
-}
-
-#ai-notify-panel:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
 #ai-notify-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 14px;
+  padding: 12px 16px;
   background: #fafafa;
-  border-bottom: 1px solid #e8e8e8;
-  color: #333;
+  border-bottom: 1px solid #eaeaea;
+  color: #111111;
   cursor: move;
   flex-shrink: 0;
   user-select: none;
@@ -41,19 +36,21 @@
   margin: 0;
   font-size: 13px;
   font-weight: 500;
-  color: #333;
+  color: #111111;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .ai-notify-controls {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   align-items: center;
 }
 
 .ai-notify-btn {
   background: transparent;
   border: none;
-  color: #999;
+  color: #888888;
   width: 24px;
   height: 24px;
   border-radius: 4px;
@@ -62,29 +59,31 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .ai-notify-btn:hover {
-  background: #f0f0f0;
-  color: #666;
+  background: #f5f5f5;
+  color: #111111;
 }
 
 #ai-notify-logs {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
-  background: #fff;
+  padding: 16px;
+  background: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .ai-log-item {
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  border-radius: 4px;
+  padding: 6px 0;
+  margin-bottom: 4px;
   font-size: 12px;
   line-height: 1.5;
   animation: slideIn 0.2s ease;
   word-break: break-word;
+  display: flex;
+  gap: 8px;
 }
 
 .ai-log-item b {
@@ -97,33 +96,25 @@
 }
 
 .ai-log-info {
-  background: #f6f8fa;
-  color: #555;
-  border-left: 3px solid #d0d7de;
+  color: #3b82f6;
 }
 
 .ai-log-success {
-  background: #f6fef6;
-  color: #1a7f37;
-  border-left: 3px solid #2da44e;
+  color: #10b981;
 }
 
 .ai-log-error {
-  background: #fff5f5;
-  color: #cf222e;
-  border-left: 3px solid #cf222e;
+  color: #ef4444;
 }
 
 .ai-log-warning {
-  background: #fffbeb;
-  color: #9a6700;
-  border-left: 3px solid #d4a72c;
+  color: #f59e0b;
 }
 
 .ai-log-time {
-  font-size: 10px;
-  opacity: 0.6;
-  margin-right: 6px;
+  font-size: 11px;
+  color: #a3a3a3;
+  min-width: 36px;
 }
 
 /* 悬浮按钮 */
@@ -133,25 +124,26 @@
   bottom: 80px;
   width: 40px;
   height: 40px;
-  background: #fff;
-  color: #333;
-  border: 1px solid #d9d9d9;
+  background: #ffffff;
+  color: #111111;
+  border: 1px solid #eaeaea;
   border-radius: 50%;
   display: none;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   z-index: 10000;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.15s, box-shadow 0.15s;
   user-select: none;
 }
 
 #ai-notify-fab:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border-color: #bbb;
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #d1d1d1;
 }
 
 /* 调整大小手柄 */
@@ -166,6 +158,6 @@
 
 /* AI按钮样式 */
 #ai-get-answers-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }

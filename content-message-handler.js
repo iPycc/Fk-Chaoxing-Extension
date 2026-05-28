@@ -47,24 +47,26 @@ const ContentMessageHandler = {
   // 处理获取题目请求
   async handleGetQuestions(sendResponse) {
     try {
-      // 仅在顶层窗口处理，避免重复获取
-      if (window.self !== window.top) return;
-
-      // GlobalLogger.info('正在获取题目...');
-      
-      // 收集题目
-      const content = await QuestionCollector.collectAll();
-      const sections = await QuestionCollector.collectFromDocumentRecursive(document);
-      
-      // 统计题目数量
+      // 允许从顶层窗口或嵌套了题目的 iframe 响应
+      // 如果当前窗口不是顶层窗口，且页面中没有任何题目容器，则忽略该请求
+      const sectionsTest = await QuestionCollector.collectFromDocumentRecursive(document);
       let totalQuestions = 0;
-      sections.forEach(section => {
+      sectionsTest.forEach(section => {
         if (section.questions) {
           totalQuestions += section.questions.length;
         }
       });
 
-      GlobalLogger.success(`共获取 ${totalQuestions} 道题目`);
+      if (window.self !== window.top && totalQuestions === 0) {
+        return; // 在没有题目的子 iframe 中不响应
+      }
+
+      // 收集题目
+      const content = await QuestionCollector.collectAll();
+      
+      if (totalQuestions > 0 && window.self === window.top) {
+        GlobalLogger.success(`共获取 ${totalQuestions} 道题目`);
+      }
 
       sendResponse({
         success: true,
@@ -72,7 +74,9 @@ const ContentMessageHandler = {
         content: content
       });
     } catch (err) {
-      GlobalLogger.error('获取题目失败', err.message);
+      if (window.self === window.top) {
+        GlobalLogger.error('获取题目失败', err.message);
+      }
       sendResponse({
         success: false,
         message: '获取题目失败'
@@ -149,8 +153,6 @@ const ContentMessageHandler = {
   // 处理获取题目数量请求
   async handleGetQuestionCount(sendResponse) {
     try {
-      if (window.self !== window.top) return;
-
       // 实时获取题目数量
       const sections = await QuestionCollector.collectFromDocumentRecursive(document);
       let totalQuestions = 0;
@@ -159,6 +161,10 @@ const ContentMessageHandler = {
           totalQuestions += section.questions.length;
         }
       });
+
+      if (window.self !== window.top && totalQuestions === 0) {
+        return; // 在没有题目的子 iframe 中不响应，避免抢占并返回 0
+      }
 
       sendResponse({
         success: true,
