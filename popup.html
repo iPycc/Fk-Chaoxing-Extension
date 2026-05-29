@@ -56,6 +56,65 @@
       </button>
     </section>
 
+    <!-- AI Config -->
+    <section class="section ai-config-section">
+      <div class="section-header-row">
+        <h2 class="section-title">AI 模型配置</h2>
+        <button class="btn-text" id="btn-ai-config-toggle" type="button">展开</button>
+      </div>
+      <div id="ai-config-panel" class="ai-config-panel" hidden>
+        <div class="form-group">
+          <label for="ai-profile-select">当前模型</label>
+          <div class="inline-row">
+            <select id="ai-profile-select" class="form-control"></select>
+            <button class="btn btn-outline btn-compact" id="btn-ai-profile-new" type="button">添加</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="ai-profile-name">显示名称</label>
+          <input id="ai-profile-name" class="form-control" type="text" placeholder="如：OpenAI / Kimi / 本地模型">
+        </div>
+
+        <div class="form-group">
+          <label for="ai-base-url">API 地址</label>
+          <input id="ai-base-url" class="form-control" type="url" placeholder="https://api.openai.com/v1">
+        </div>
+
+        <div class="form-group">
+          <label for="ai-api-key">API 密钥</label>
+          <input id="ai-api-key" class="form-control" type="password" placeholder="sk-...">
+        </div>
+
+        <div class="form-group">
+          <label for="ai-model-id">模型 ID</label>
+          <input id="ai-model-id" class="form-control" type="text" placeholder="gpt-4o-mini / kimi-k2 / your-model-id">
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="ai-api-path">接口路径</label>
+            <input id="ai-api-path" class="form-control" type="text" value="/chat/completions">
+          </div>
+          <div class="form-group">
+            <label for="ai-temperature">温度</label>
+            <input id="ai-temperature" class="form-control" type="number" min="0" max="2" step="0.1" value="0.3">
+          </div>
+          <div class="form-group">
+            <label for="ai-max-tokens">最大 Tokens</label>
+            <input id="ai-max-tokens" class="form-control" type="number" min="1" step="1" value="2000">
+          </div>
+        </div>
+
+        <p class="form-help">配置会保存到浏览器本地存储。不要把真实 API Key 写入仓库中的 .env 或截图公开。</p>
+
+        <div class="config-actions">
+          <button class="btn btn-primary" id="btn-ai-config-save" type="button">保存配置</button>
+          <button class="btn btn-outline" id="btn-ai-config-delete" type="button">删除</button>
+        </div>
+      </div>
+    </section>
+
     <div class="divider"></div>
 
     <!-- Logs -->

@@ -344,3 +344,111 @@ input:checked + .slider:before {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* AI Config */
+body {
+  width: 380px;
+}
+
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ai-config-section {
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+}
+
+.ai-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-main);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.ai-config-panel[hidden] {
+  display: none;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-control {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.form-control:hover {
+  border-color: #d1d1d1;
+}
+
+.form-control:focus {
+  border-color: var(--info);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.form-control::placeholder {
+  color: #b5b5b5;
+}
+
+.inline-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.inline-row .form-control {
+  flex: 1;
+}
+
+.btn-compact {
+  width: auto;
+  min-width: 58px;
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 1fr;
+  gap: var(--space-2);
+}
+
+.form-help {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.45;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-mute);
+  border: 1px dashed var(--border);
+}
+
+.config-actions {
+  display: grid;
+  grid-template-columns: 1fr 0.45fr;
+  gap: var(--space-2);
+}
