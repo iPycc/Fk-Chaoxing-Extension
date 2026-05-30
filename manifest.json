@@ -1,10 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Fk-Chaoxing",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "解除复制粘贴限制、自动提取题目并支持 AI 一键答题，专为超星学习通优化",
-  "permissions": ["clipboardWrite", "scripting", "storage"],
-  "host_permissions": ["*://*.chaoxing.com/*", "https://api.deepseek.com/*"],
+  "permissions": [
+    "clipboardWrite",
+    "scripting",
+    "storage",
+    "permissions"
+  ],
+  "host_permissions": [
+    "*://*.chaoxing.com/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -18,7 +25,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.chaoxing.com/*"],
+      "matches": [
+        "*://*.chaoxing.com/*"
+      ],
       "js": [
         "assets/TyprMd5.js",
         "modules/logger.js",
@@ -37,19 +46,32 @@
         "content-message-handler.js",
         "content.js"
       ],
-      "css": ["modules/ai-answer/notify.css"],
+      "css": [
+        "modules/ai-answer/notify.css"
+      ],
       "run_at": "document_start",
       "all_frames": true
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/table.json", "injected.js", "modules/ai-answer/notify.css"],
-      "matches": ["*://*.chaoxing.com/*"]
+      "resources": [
+        "assets/table.json",
+        "injected.js",
+        "modules/ai-answer/notify.css"
+      ],
+      "matches": [
+        "*://*.chaoxing.com/*"
+      ]
     }
   ],
   "icons": {
     "48": "icons/chaoxing.png",
     "128": "icons/chaoxing.png"
-  }
+  },
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ]
 }

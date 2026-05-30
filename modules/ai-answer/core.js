@@ -37,6 +37,13 @@ const AIAnswerCore = {
       AINotify.info('正在发送到 AI 分析...');
 
       // 调用 AI API
+      const config = await AIApi.loadConfig();
+      AIApi.validateConfig(config);
+      
+      // 初始化通知面板并更新下拉框
+      await AINotify.init();
+      AINotify.updateModelSelect();
+
       const responseText = await AIApi.getAnswers(questions);
       AINotify.success('AI 返回答案成功');
       

@@ -15,7 +15,7 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'AI_API_REQUEST') {
     log.info('Received AI API request');
-    callDeepSeekAPI(request.data)
+    callOpenAICompatibleAPI(request.data)
       .then(result => {
         log.info('AI API request successful');
         sendResponse({ success: true, data: result });
@@ -45,18 +45,54 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-async function callDeepSeekAPI(data) {
-  const response = await fetch('https://api.deepseek.com/chat/completions', {
+function normalizeApiConfig(config = {}) {
+  const normalized = {
+    baseUrl: (config.baseUrl || '').trim().replace(/\/+$/, ''),
+    path: (config.path || '/chat/completions').trim(),
+    apiKey: (config.apiKey || '').trim(),
+    model: (config.model || '').trim(),
+    temperature: Number.isFinite(Number(config.temperature)) ? Number(config.temperature) : 0.3
+  };
+
+  if (!normalized.path.startsWith('/')) {
+    normalized.path = `/${normalized.path}`;
+  }
+
+  return normalized;
+}
+
+function buildApiUrl(config) {
+  try {
+    const baseUrl = new URL(config.baseUrl);
+    return `${baseUrl.toString().replace(/\/+$/, '')}${config.path}`;
+  } catch (err) {
+    throw new Error('AI API 地址格式不正确，请检查配置');
+  }
+}
+
+async function callOpenAICompatibleAPI(data) {
+  const config = normalizeApiConfig(data.config || data);
+
+  if (!config.baseUrl) {
+    throw new Error('请先配置 AI API 地址');
+  }
+  if (!config.apiKey) {
+    throw new Error('请先配置 AI API 密钥');
+  }
+  if (!config.model) {
+    throw new Error('请先配置模型 ID');
+  }
+
+  const response = await fetch(buildApiUrl(config), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${data.apiKey}`
+      'Authorization': `Bearer ${config.apiKey}`
     },
     body: JSON.stringify({
-      model: data.model || 'deepseek-chat',
+      model: config.model,
       messages: data.messages,
-      temperature: 0.3,
-      max_tokens: 2000
+      temperature: config.temperature
     })
   });
 
@@ -66,5 +102,10 @@ async function callDeepSeekAPI(data) {
   }
 
   const result = await response.json();
-  return result.choices[0].message.content;
+  const content = result?.choices?.[0]?.message?.content;
+  if (typeof content !== 'string') {
+    throw new Error('API 返回格式不符合 OpenAI Chat Completions 规范');
+  }
+
+  return content;
 }
