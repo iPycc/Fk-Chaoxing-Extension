@@ -55,7 +55,11 @@ const AINotify = {
   // 初始化通知面板
   init() {
     if (!this.shouldShowUI()) return;
-    if (document.getElementById('ai-notify-panel')) return;
+    
+    if (document.getElementById('ai-notify-panel')) {
+      this.updateModelSelect();
+      return;
+    }
     
     GlobalLogger.info('AI 通知面板已加载');
     
@@ -66,7 +70,7 @@ const AINotify = {
     const panelHtml = `
       <div id="ai-notify-panel" style="top:${randomTop}px;right:${randomRight}px;">
         <div id="ai-notify-header">
-          <h4>AI 答题助手</h4>
+          <h4>答题助手 <select id="ai-notify-model-select" class="model-select-badge" title="切换模型"></select></h4>
           <div class="ai-notify-controls">
             <button class="ai-notify-btn" id="ai-notify-clear" title="清空日志">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -92,10 +96,43 @@ const AINotify = {
     this.logsContainer = document.getElementById('ai-notify-logs');
     
     this.bindEvents();
-    
-    // 默认隐藏面板，显示悬浮按钮
-    this.panel.style.display = 'none';
-    document.getElementById('ai-notify-fab').style.display = 'flex';
+    this.updateModelSelect();
+
+    // 默认展示面板，隐藏悬浮按钮
+    this.panel.style.display = 'flex';
+    document.getElementById('ai-notify-fab').style.display = 'none';
+  },
+
+  async updateModelSelect() {
+    try {
+      const data = await chrome.storage.local.get(['aiProfiles', 'activeAiProfileId', 'aiConfig']);
+      const profiles = Array.isArray(data.aiProfiles) ? data.aiProfiles : [];
+      if (profiles.length === 0 && data.aiConfig) {
+        profiles.push(data.aiConfig);
+      }
+      
+      const select = document.getElementById('ai-notify-model-select');
+      if (!select) return;
+      
+      select.innerHTML = '';
+      profiles.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id || 'default';
+        const displayName = p.name || '未命名模型';
+        const displayModel = p.model || '未配置ID';
+        option.textContent = `${displayName}:${displayModel}`;
+        if ((p.id || 'default') === (data.activeAiProfileId || 'default')) {
+          option.selected = true;
+          // 当找到匹配的模型时，如果面板处于初始加载状态，在日志中打印一条信息
+          if (!this.logsContainer.innerHTML.includes('当前模型：')) {
+            this.info(`当前模型：${displayName}:${displayModel}`);
+          }
+        }
+        select.appendChild(option);
+      });
+    } catch (e) {
+      console.error('Failed to load models', e);
+    }
   },
 
   // 绑定事件
@@ -103,6 +140,15 @@ const AINotify = {
     const header = document.getElementById('ai-notify-header');
     const fab = document.getElementById('ai-notify-fab');
     
+    const modelSelect = document.getElementById('ai-notify-model-select');
+    if (modelSelect) {
+      modelSelect.addEventListener('change', async (e) => {
+        const newId = e.target.value;
+        await chrome.storage.local.set({ activeAiProfileId: newId });
+        this.info(`已切换到模型: ${e.target.options[e.target.selectedIndex].text}`);
+      });
+    }
+
     // 拖拽功能
     header.addEventListener('mousedown', (e) => this.startDrag(e));
     document.addEventListener('mousemove', (e) => this.onDrag(e));

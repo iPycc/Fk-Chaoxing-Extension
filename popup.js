@@ -10,8 +10,12 @@ class PopupController {
     
     this.btnExtractAuto = document.getElementById('btn-extract-auto');
     this.btnAiAnswer = document.getElementById('btn-ai-answer');
-    this.aiConfigPanel = document.getElementById('ai-config-panel');
-    this.btnAiConfigToggle = document.getElementById('btn-ai-config-toggle');
+    this.btnAiText = document.getElementById('btn-ai-text');
+    this.btnAiIcon = document.getElementById('btn-ai-icon');
+    this.btnAiIconDefault = document.getElementById('btn-ai-icon-default');
+    this.aiConfigModal = document.getElementById('ai-config-modal');
+    this.btnAiConfigOpen = document.getElementById('btn-ai-config-open');
+    this.btnAiConfigClose = document.getElementById('btn-ai-config-close');
     this.aiProfileSelect = document.getElementById('ai-profile-select');
     this.aiProfileName = document.getElementById('ai-profile-name');
     this.aiBaseUrl = document.getElementById('ai-base-url');
@@ -19,7 +23,6 @@ class PopupController {
     this.aiModelId = document.getElementById('ai-model-id');
     this.aiApiPath = document.getElementById('ai-api-path');
     this.aiTemperature = document.getElementById('ai-temperature');
-    this.aiMaxTokens = document.getElementById('ai-max-tokens');
     this.btnAiProfileNew = document.getElementById('btn-ai-profile-new');
     this.btnAiConfigSave = document.getElementById('btn-ai-config-save');
     this.btnAiConfigDelete = document.getElementById('btn-ai-config-delete');
@@ -48,12 +51,11 @@ class PopupController {
     return {
       id: 'default',
       name: '默认模型',
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl: '',
       path: '/chat/completions',
       apiKey: '',
       model: '',
-      temperature: 0.3,
-      maxTokens: 2000
+      temperature: 0.3
     };
   }
 
@@ -70,7 +72,6 @@ class PopupController {
     normalized.apiKey = (normalized.apiKey || '').trim();
     normalized.model = (normalized.model || '').trim();
     normalized.temperature = Number.isFinite(Number(normalized.temperature)) ? Number(normalized.temperature) : defaults.temperature;
-    normalized.maxTokens = Number.isFinite(Number(normalized.maxTokens)) ? Number(normalized.maxTokens) : defaults.maxTokens;
     return normalized;
   }
 
@@ -99,6 +100,7 @@ class PopupController {
 
     this.renderAiProfileOptions();
     this.fillAiProfileForm(this.getActiveAiProfile());
+    this.updateAiAnswerButton();
   }
 
   getActiveAiProfile() {
@@ -118,14 +120,52 @@ class PopupController {
 
   fillAiProfileForm(profile) {
     const normalized = this.normalizeAiProfile(profile);
-    this.aiProfileName.value = normalized.name;
-    this.aiBaseUrl.value = normalized.baseUrl;
-    this.aiApiKey.value = normalized.apiKey;
-    this.aiModelId.value = normalized.model;
-    this.aiApiPath.value = normalized.path;
-    this.aiTemperature.value = normalized.temperature;
-    this.aiMaxTokens.value = normalized.maxTokens;
+    this.aiProfileName.value = normalized.name || '';
+    this.aiBaseUrl.value = normalized.baseUrl || '';
+    this.aiApiKey.value = normalized.apiKey || '';
+    this.aiModelId.value = normalized.model || '';
+    this.aiApiPath.value = normalized.path || '/chat/completions';
+    this.aiTemperature.value = normalized.temperature !== undefined ? normalized.temperature : 0.3;
     this.btnAiConfigDelete.disabled = this.aiProfiles.length <= 1;
+    this.updateAiAnswerButton();
+  }
+
+  updateAiAnswerButton() {
+    const profile = this.getActiveAiProfile();
+    const modelName = profile.name || profile.model || 'AI';
+    this.btnAiText.textContent = `使用 ${modelName} 答题`;
+    
+    if (profile.baseUrl) {
+      try {
+        const url = new URL(profile.baseUrl);
+        let hostname = url.hostname;
+        const parts = hostname.split('.');
+        if (parts.length > 2) {
+          // 处理类似 .com.cn, .co.uk 的情况
+          if (['com', 'co', 'net', 'org', 'edu', 'gov'].includes(parts[parts.length - 2])) {
+            hostname = parts.slice(-3).join('.');
+          } else {
+            hostname = parts.slice(-2).join('.');
+          }
+        }
+        
+        this.btnAiIcon.src = `https://${hostname}/favicon.ico`;
+        this.btnAiIcon.style.display = 'inline-block';
+        this.btnAiIconDefault.style.display = 'none';
+        
+        // Handle image load error
+        this.btnAiIcon.onerror = () => {
+          this.btnAiIcon.style.display = 'none';
+          this.btnAiIconDefault.style.display = 'inline-block';
+        };
+      } catch (e) {
+        this.btnAiIcon.style.display = 'none';
+        this.btnAiIconDefault.style.display = 'inline-block';
+      }
+    } else {
+      this.btnAiIcon.style.display = 'none';
+      this.btnAiIconDefault.style.display = 'inline-block';
+    }
   }
 
   readAiProfileForm(id = this.activeAiProfileId) {
@@ -136,8 +176,7 @@ class PopupController {
       path: this.aiApiPath.value,
       apiKey: this.aiApiKey.value,
       model: this.aiModelId.value,
-      temperature: this.aiTemperature.value,
-      maxTokens: this.aiMaxTokens.value
+      temperature: this.aiTemperature.value
     });
   }
 
@@ -177,11 +216,60 @@ class PopupController {
     });
   }
 
+  async testAiConnection(profile) {
+    const url = `${profile.baseUrl.replace(/\/+$/, '')}${profile.path}`;
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${profile.apiKey}`
+    };
+    const body = JSON.stringify({
+      model: profile.model,
+      messages: [{ role: 'user', content: 'hi' }],
+      max_tokens: 1 // 用最少的 token 进行测试
+    });
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMsg = `HTTP ${response.status} ${response.statusText}`;
+        try {
+          const errData = JSON.parse(errorText);
+          if (errData.error && errData.error.message) {
+            errorMsg = errData.error.message;
+          }
+        } catch (e) {
+          // Ignore JSON parse error
+        }
+        throw new Error(errorMsg);
+      }
+      return true;
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+        throw new Error('网络请求失败，请检查 API 地址是否正确以及是否跨域');
+      }
+      throw err;
+    }
+  }
+
   async saveAiProfile() {
+    const btn = this.btnAiConfigSave;
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '测试连接中...';
+
     try {
       const profile = this.readAiProfileForm();
       this.validateAiProfile(profile);
       await this.requestAiHostPermission(profile.baseUrl);
+      
+      // 测试连接
+      await this.testAiConnection(profile);
 
       const index = this.aiProfiles.findIndex(item => item.id === profile.id);
       if (index >= 0) {
@@ -193,9 +281,14 @@ class PopupController {
       await this.persistAiProfiles();
       this.renderAiProfileOptions();
       this.fillAiProfileForm(profile);
-      this.log('success', `已保存 AI 模型配置：${profile.name}`);
+      this.log('success', `保存成功，连接测试通过：${profile.name}`);
+      this.aiConfigModal.hidden = true;
     } catch (err) {
-      this.log('error', `保存 AI 配置失败：${err.message}`);
+      this.log('error', `保存失败：${err.message}`);
+      alert(`配置保存失败：\n${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
     }
   }
 
@@ -310,6 +403,10 @@ class PopupController {
       this.togglePluginState();
     });
 
+    document.getElementById('btn-refresh').addEventListener('click', () => {
+      chrome.runtime.reload();
+    });
+
     // 自动获取题目
     this.btnExtractAuto.addEventListener('click', () => {
       this.getQuestions();
@@ -320,15 +417,18 @@ class PopupController {
       this.aiAnswer();
     });
 
-    this.btnAiConfigToggle.addEventListener('click', () => {
-      const willOpen = this.aiConfigPanel.hidden;
-      this.aiConfigPanel.hidden = !willOpen;
-      this.btnAiConfigToggle.textContent = willOpen ? '收起' : '展开';
+    this.btnAiConfigOpen.addEventListener('click', () => {
+      this.aiConfigModal.hidden = false;
+    });
+
+    this.btnAiConfigClose.addEventListener('click', () => {
+      this.aiConfigModal.hidden = true;
     });
 
     this.aiProfileSelect.addEventListener('change', () => {
       this.activeAiProfileId = this.aiProfileSelect.value;
       this.fillAiProfileForm(this.getActiveAiProfile());
+      this.persistAiProfiles();
     });
 
     this.btnAiProfileNew.addEventListener('click', () => {

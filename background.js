@@ -51,8 +51,7 @@ function normalizeApiConfig(config = {}) {
     path: (config.path || '/chat/completions').trim(),
     apiKey: (config.apiKey || '').trim(),
     model: (config.model || '').trim(),
-    temperature: Number.isFinite(Number(config.temperature)) ? Number(config.temperature) : 0.3,
-    maxTokens: Number.isFinite(Number(config.maxTokens)) ? Number(config.maxTokens) : 2000
+    temperature: Number.isFinite(Number(config.temperature)) ? Number(config.temperature) : 0.3
   };
 
   if (!normalized.path.startsWith('/')) {
@@ -93,8 +92,7 @@ async function callOpenAICompatibleAPI(data) {
     body: JSON.stringify({
       model: config.model,
       messages: data.messages,
-      temperature: config.temperature,
-      max_tokens: config.maxTokens
+      temperature: config.temperature
     })
   });
 

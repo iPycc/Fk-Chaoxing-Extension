@@ -7,8 +7,7 @@ const AIApi = {
     path: '/chat/completions',
     apiKey: '',
     model: '',
-    temperature: 0.3,
-    maxTokens: 2000
+    temperature: 0.3
   },
 
   // prompt
@@ -41,7 +40,6 @@ const AIApi = {
     merged.apiKey = (merged.apiKey || '').trim();
     merged.model = (merged.model || '').trim();
     merged.temperature = Number.isFinite(Number(merged.temperature)) ? Number(merged.temperature) : this.DEFAULT_CONFIG.temperature;
-    merged.maxTokens = Number.isFinite(Number(merged.maxTokens)) ? Number(merged.maxTokens) : this.DEFAULT_CONFIG.maxTokens;
     return merged;
   },
 
