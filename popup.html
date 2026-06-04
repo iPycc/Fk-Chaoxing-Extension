@@ -19,7 +19,7 @@
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <h1 class="plugin-title">Fk-Chaoxing <span class="version">v1.2.3</span></h1>
+        <h1 class="plugin-title">Fk-Chaoxing <span class="version">v1.3.0</span></h1>
       </div>
       <div class="header-right">
         <button class="btn-icon" id="btn-refresh" title="重载插件" style="margin-right: 4px;">
@@ -47,7 +47,7 @@
     <section class="section">
       <h2 class="section-title">提取题目</h2>
       <button class="btn btn-outline" id="btn-extract-auto" title="自动识别页面类型并提取题目">
-        <i class="ri-clipboard-line"></i> 自动提取本页题目
+        <i class="ri-clipboard-line"></i> 提取本页题目
       </button>
     </section>
 
@@ -59,11 +59,16 @@
           <i class="ri-settings-3-line"></i> 配置
         </button>
       </div>
-      <button class="btn btn-primary" id="btn-ai-answer">
-        <img id="btn-ai-icon" src="" style="width: 14px; height: 14px; border-radius: 2px; display: none;" />
-        <i class="ri-openai-fill" id="btn-ai-icon-default"></i>
-        <span id="btn-ai-text">AI 答题</span>
-      </button>
+      <div class="button-stack">
+        <button class="btn btn-primary" id="btn-ai-answer">
+          <img id="btn-ai-icon" src="" style="width: 14px; height: 14px; border-radius: 2px; display: none;" />
+          <i class="ri-openai-fill" id="btn-ai-icon-default"></i>
+          <span id="btn-ai-text">AI 答题</span>
+        </button>
+        <button class="btn btn-outline" id="btn-auto-apply-toggle">
+          <span id="btn-auto-apply-text">自动作答：关闭</span>
+        </button>
+      </div>
     </section>
 
     <div class="divider"></div>

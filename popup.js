@@ -10,6 +10,8 @@ class PopupController {
     
     this.btnExtractAuto = document.getElementById('btn-extract-auto');
     this.btnAiAnswer = document.getElementById('btn-ai-answer');
+    this.btnAutoApplyToggle = document.getElementById('btn-auto-apply-toggle');
+    this.btnAutoApplyText = document.getElementById('btn-auto-apply-text');
     this.btnAiText = document.getElementById('btn-ai-text');
     this.btnAiIcon = document.getElementById('btn-ai-icon');
     this.btnAiIconDefault = document.getElementById('btn-ai-icon-default');
@@ -29,6 +31,7 @@ class PopupController {
     
     this.currentTab = null;
     this.isEnabled = true;
+    this.autoApplyAnswers = false;
     this.aiProfiles = [];
     this.activeAiProfileId = null;
     
@@ -38,6 +41,7 @@ class PopupController {
   async init() {
     this.log('info', '控制面板已加载');
     await this.loadPluginState();
+    await this.loadAutoApplyState();
     await this.loadAiProfiles();
     await this.getCurrentTab();
     await this.detectPageType();
@@ -101,6 +105,21 @@ class PopupController {
     this.renderAiProfileOptions();
     this.fillAiProfileForm(this.getActiveAiProfile());
     this.updateAiAnswerButton();
+  }
+
+  async loadAutoApplyState() {
+    const data = await chrome.storage.local.get('autoApplyAnswers');
+    this.autoApplyAnswers = data.autoApplyAnswers === true;
+    this.updateAutoApplyButton();
+  }
+
+  updateAutoApplyButton() {
+    if (!this.btnAutoApplyToggle || !this.btnAutoApplyText) return;
+    this.btnAutoApplyText.textContent = `自动作答：${this.autoApplyAnswers ? '开启' : '关闭'}`;
+    this.btnAutoApplyToggle.classList.toggle('active', this.autoApplyAnswers);
+    this.btnAutoApplyToggle.title = this.autoApplyAnswers
+      ? '当前会自动将 AI 答案写入编辑器'
+      : '当前只显示 AI 返回答案，不自动填写';
   }
 
   getActiveAiProfile() {
@@ -341,6 +360,14 @@ class PopupController {
     const disabled = !this.isEnabled;
     this.btnExtractAuto.disabled = disabled;
     this.btnAiAnswer.disabled = disabled;
+    this.btnAutoApplyToggle.disabled = disabled;
+  }
+
+  async toggleAutoApplyState() {
+    this.autoApplyAnswers = !this.autoApplyAnswers;
+    await chrome.storage.local.set({ autoApplyAnswers: this.autoApplyAnswers });
+    this.updateAutoApplyButton();
+    this.log('info', this.autoApplyAnswers ? '自动作答已开启，AI 答案会自动写入编辑器' : '自动作答已关闭，AI 仅展示返回答案');
   }
 
   // 获取当前标签页
@@ -415,6 +442,10 @@ class PopupController {
     // AI 答题
     this.btnAiAnswer.addEventListener('click', () => {
       this.aiAnswer();
+    });
+
+    this.btnAutoApplyToggle.addEventListener('click', () => {
+      this.toggleAutoApplyState();
     });
 
     this.btnAiConfigOpen.addEventListener('click', () => {

@@ -26,6 +26,10 @@ const ContentMessageHandler = {
         case 'aiAnswer':
           await this.handleAIAnswer(sendResponse);
           break;
+
+        case 'insertTestAnswer':
+          await this.handleInsertTestAnswer(sendResponse);
+          break;
         
         case 'getLogs':
           this.handleGetLogs(sendResponse);
@@ -127,6 +131,30 @@ const ContentMessageHandler = {
       sendResponse({
         success: false,
         message: 'AI 答题失败: ' + err.message
+      });
+    }
+  },
+
+  async handleInsertTestAnswer(sendResponse) {
+    try {
+      if (window.self !== window.top) return;
+
+      if (typeof AIAnswerCore === 'undefined') {
+        throw new Error('AI 模块未加载');
+      }
+
+      const insertedCount = await AIAnswerCore.insertRandomFillAnswers();
+
+      sendResponse({
+        success: true,
+        insertedCount,
+        message: `已写入 ${insertedCount} 个填空编辑器`
+      });
+    } catch (err) {
+      GlobalLogger.error('测试插入失败', err.message);
+      sendResponse({
+        success: false,
+        message: '测试插入失败: ' + err.message
       });
     }
   },
