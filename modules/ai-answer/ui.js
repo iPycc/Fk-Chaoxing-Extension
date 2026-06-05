@@ -10,8 +10,16 @@ const AIAnswerUI = {
     return window.location.href.includes('/exam-ans/mooc2/exam/preview');
   },
 
+  // 检查是否是作业作答页面
+  isHomeworkWorkPage() {
+    const url = window.location.href;
+    return url.includes('mooc1.chaoxing.com/mooc-ans/mooc2/work/dowork') ||
+           url.includes('mooc2-ans.chaoxing.com/mooc-ans/mooc2/work/dowork') ||
+           url.includes('/work/dowork');
+  },
+
   shouldShowUI() {
-    return this.isMainPage() || this.isExamPage();
+    return this.isMainPage() || this.isExamPage() || this.isHomeworkWorkPage();
   },
 
   // 注入 CSS 样式
@@ -49,8 +57,16 @@ const AINotify = {
     return window.location.href.includes('/exam-ans/mooc2/exam/preview');
   },
 
+  // 检查是否是作业作答页面
+  isHomeworkWorkPage() {
+    const url = window.location.href;
+    return url.includes('mooc1.chaoxing.com/mooc-ans/mooc2/work/dowork') ||
+           url.includes('mooc2-ans.chaoxing.com/mooc-ans/mooc2/work/dowork') ||
+           url.includes('/work/dowork');
+  },
+
   shouldShowUI() {
-    return this.isMainPage() || this.isExamPage();
+    return this.isMainPage() || this.isExamPage() || this.isHomeworkWorkPage();
   },
 
   // 初始化通知面板

@@ -271,6 +271,8 @@ const AIAnswerCore = {
       const fallbackLetter = String.fromCharCode(65 + index);
       const marker = item.querySelector('.num_option, span[data]');
       const markerText = this.normalizeText(marker?.textContent || '');
+      // 优先使用 data 属性作为实际值，显示文本作为字母标识
+      const dataValue = marker?.getAttribute('data');
       const letter = (markerText.match(/[A-Z]/i)?.[0] || fallbackLetter).toUpperCase();
       const input = item.querySelector('input[type="radio"], input[type="checkbox"]');
       const clickable = item.querySelector('label, a, .num_option, .answer_p') || item;
@@ -283,7 +285,7 @@ const AIAnswerCore = {
 
       return {
         letter,
-        value: marker?.getAttribute('data') || input?.value || letter,
+        value: dataValue || input?.value || letter,
         item,
         input,
         clickable,
@@ -552,7 +554,7 @@ const AIAnswerCore = {
   },
 
   buildRandomAnswer(seed) {
-    const pool = ['测试文本', '随机答案', 'Fk-Chaoxing', '自动填入', 'UE内容'];
+    const pool = ['Fk-Chaoxing', '自动填入', 'UE内容'];
     const suffix = Math.random().toString(36).slice(2, 8);
     return `${pool[seed % pool.length]}-${seed + 1}-${suffix}`;
   },

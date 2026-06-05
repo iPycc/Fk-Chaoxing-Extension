@@ -414,6 +414,8 @@ class PopupController {
 
     if (url.includes('/exam-ans/mooc2/exam/preview')) {
       this.log('info', '检测到考试页面');
+    } else if (url.includes('/mooc-ans/mooc2/work/dowork') || url.includes('/work/dowork')) {
+      this.log('info', '检测到作业作答页面');
     } else if (url.includes('/mycourse/studentstudy')) {
       this.log('info', '检测到作业/章节页面');
     } else if (url.includes('chaoxing.com')) {

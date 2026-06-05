@@ -3,7 +3,9 @@ const HomeworkExtractor = {
   // Check if current page is supported
   canHandle(url) {
     return url.includes('/mycourse/studentstudy') || 
-           url.includes('chaoxing.com') && !url.includes('/exam/');
+           url.includes('/mooc-ans/mooc2/work/dowork') ||
+           url.includes('/work/dowork') ||
+           (url.includes('chaoxing.com') && !url.includes('/exam/'));
   },
 
   normalizeText(value = '') {

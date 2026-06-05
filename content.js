@@ -58,8 +58,9 @@ const ChaoxingHelper = {
       // 支持更多超星考试/作业/章节页面的 URL 匹配模式
       const isExam = url.includes('/exam-ans/mooc2/exam/preview') || url.includes('/exam/test/reVersionTestStartNew');
       const isHomeworkOrChapter = url.includes('/mycourse/studentstudy') || url.includes('/work/mooc/') || url.includes('/work/doHomeWorkNew') || url.includes('knowledge/cards');
+      const isHomeworkWorkPage = url.includes('/mooc-ans/mooc2/work/dowork') || url.includes('/work/dowork');
       
-      if (isExam || isHomeworkOrChapter) {
+      if (isExam || isHomeworkOrChapter || isHomeworkWorkPage) {
         // 由于超星页面可能存在多层 iframe 嵌套或复杂的异步加载，我们延长等待时间并提供重试机制
         const tryExtract = async (retries = 3) => {
           try {
