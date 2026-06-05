@@ -226,9 +226,40 @@ const AIAnswerCore = {
   },
 
   extractFillTargets(container) {
-    return Array.from(container.querySelectorAll('.clearfix .Zy_ulTk .blankItemDiv, .blankItemDiv'))
+    // 传统填空题结构
+    const traditionalTargets = Array.from(container.querySelectorAll('.clearfix .Zy_ulTk .blankItemDiv, .blankItemDiv'))
       .map((blankItem, blankIndex) => this.createEditorTarget(blankItem, blankIndex))
       .filter(Boolean);
+    
+    if (traditionalTargets.length > 0) {
+      return traditionalTargets;
+    }
+    
+    // 作业页面新填空题结构：每个空对应一个 .Answer 容器
+    const answerContainers = container.querySelectorAll('.stem_answer .Answer, .Answer');
+    if (answerContainers.length > 0) {
+      return Array.from(answerContainers).map((answerDiv, index) => {
+        // 查找UEditor编辑器
+        const textarea = answerDiv.querySelector('textarea[id^="answerEditor"]');
+        const editorRoot = answerDiv.querySelector('.edui-editor') || answerDiv;
+        const iframe = answerDiv.querySelector('iframe[id^="ueditor_"]');
+        
+        if (!textarea && !iframe) {
+          return null;
+        }
+        
+        return {
+          index,
+          root: editorRoot,
+          textarea,
+          iframe,
+          inputDiv: null,
+          blankItemDiv: answerDiv
+        };
+      }).filter(Boolean);
+    }
+    
+    return [];
   },
 
   extractShortAnswerTargets(container) {

@@ -25,6 +25,8 @@ const HomeworkExtractor = {
   detectType(container, options = []) {
     const rawType = this.getTypeLabel(container);
 
+    if (rawType.includes('填空')) return 'fill_blank';
+    if (rawType.includes('简答')) return 'short_answer';
     if (rawType.includes('多选')) return 'multi';
     if (rawType.includes('单选') || rawType.includes('判断')) return 'single';
     if (options.length === 4) return 'single';
