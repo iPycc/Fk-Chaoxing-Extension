@@ -35,8 +35,15 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   width: 380px;
+  height: 560px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
   font-family: 'Inter', 'Noto Sans SC', sans-serif;
   background: var(--bg-main);
   color: var(--text-primary);
@@ -48,7 +55,7 @@ body {
 .container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100%;
 }
 
 /* Typography */
@@ -205,6 +212,12 @@ input:checked + .slider:before {
   margin-bottom: 0;
 }
 
+.button-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .extractor-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -244,6 +257,12 @@ input:checked + .slider:before {
   border-color: #d1d1d1;
 }
 
+.btn-outline.active {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #047857;
+}
+
 .btn-primary {
   background: var(--primary);
   border: 1px solid var(--primary);
@@ -274,18 +293,19 @@ input:checked + .slider:before {
   flex-direction: column;
   padding-top: var(--space-3);
   padding-bottom: 0;
+  min-height: 0;
 }
 
 .log-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  flex-shrink: 0;
 }
 
 .log-content {
   flex: 1;
-  min-height: 120px;
-  max-height: 180px;
+  min-height: 0;
   overflow-y: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
@@ -326,6 +346,7 @@ input:checked + .slider:before {
   justify-content: space-between;
   border-top: 1px solid var(--border);
   background: var(--bg-mute);
+  flex-shrink: 0;
 }
 
 .link {

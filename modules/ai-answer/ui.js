@@ -10,8 +10,16 @@ const AIAnswerUI = {
     return window.location.href.includes('/exam-ans/mooc2/exam/preview');
   },
 
+  // 检查是否是作业作答页面
+  isHomeworkWorkPage() {
+    const url = window.location.href;
+    return url.includes('mooc1.chaoxing.com/mooc-ans/mooc2/work/dowork') ||
+           url.includes('mooc2-ans.chaoxing.com/mooc-ans/mooc2/work/dowork') ||
+           url.includes('/work/dowork');
+  },
+
   shouldShowUI() {
-    return this.isMainPage() || this.isExamPage();
+    return this.isMainPage() || this.isExamPage() || this.isHomeworkWorkPage();
   },
 
   // 注入 CSS 样式
@@ -37,6 +45,7 @@ const AINotify = {
   logsContainer: null,
   isDragging: false,
   dragOffset: { x: 0, y: 0 },
+  storageListenerBound: false,
 
   // 检查是否是主页面或考试页面
   isMainPage() {
@@ -48,8 +57,16 @@ const AINotify = {
     return window.location.href.includes('/exam-ans/mooc2/exam/preview');
   },
 
+  // 检查是否是作业作答页面
+  isHomeworkWorkPage() {
+    const url = window.location.href;
+    return url.includes('mooc1.chaoxing.com/mooc-ans/mooc2/work/dowork') ||
+           url.includes('mooc2-ans.chaoxing.com/mooc-ans/mooc2/work/dowork') ||
+           url.includes('/work/dowork');
+  },
+
   shouldShowUI() {
-    return this.isMainPage() || this.isExamPage();
+    return this.isMainPage() || this.isExamPage() || this.isHomeworkWorkPage();
   },
 
   // 初始化通知面板
@@ -83,6 +100,12 @@ const AINotify = {
             </button>
           </div>
         </div>
+        <div id="ai-notify-settings">
+          <label class="ai-notify-toggle" for="ai-notify-auto-apply">
+            <input id="ai-notify-auto-apply" type="checkbox">
+            <span id="ai-notify-auto-apply-text">自动作答已关闭</span>
+          </label>
+        </div>
         <div id="ai-notify-logs"></div>
         <div id="ai-notify-resize"></div>
       </div>
@@ -97,6 +120,7 @@ const AINotify = {
     
     this.bindEvents();
     this.updateModelSelect();
+    this.updateAutoApplyToggle();
 
     // 默认展示面板，隐藏悬浮按钮
     this.panel.style.display = 'flex';
@@ -135,6 +159,22 @@ const AINotify = {
     }
   },
 
+  async updateAutoApplyToggle() {
+    try {
+      const checkbox = document.getElementById('ai-notify-auto-apply');
+      const text = document.getElementById('ai-notify-auto-apply-text');
+      if (!checkbox || !text) return;
+
+      const data = await chrome.storage.local.get('autoApplyAnswers');
+      const enabled = data.autoApplyAnswers === true;
+      checkbox.checked = enabled;
+      text.textContent = enabled ? '自动作答已开启' : '自动作答已关闭';
+      checkbox.title = enabled ? '当前会自动将 AI 答案写入编辑器' : '当前仅展示 AI 返回答案';
+    } catch (e) {
+      console.error('Failed to load auto apply state', e);
+    }
+  },
+
   // 绑定事件
   bindEvents() {
     const header = document.getElementById('ai-notify-header');
@@ -147,6 +187,26 @@ const AINotify = {
         await chrome.storage.local.set({ activeAiProfileId: newId });
         this.info(`已切换到模型: ${e.target.options[e.target.selectedIndex].text}`);
       });
+    }
+
+    const autoApplyToggle = document.getElementById('ai-notify-auto-apply');
+    if (autoApplyToggle) {
+      autoApplyToggle.addEventListener('change', async (e) => {
+        const enabled = e.target.checked;
+        await chrome.storage.local.set({ autoApplyAnswers: enabled });
+        await this.updateAutoApplyToggle();
+        this.info(enabled ? '自动作答已开启，AI 会自动写入编辑器' : '自动作答已关闭，AI 仅展示返回答案');
+      });
+    }
+
+    if (!this.storageListenerBound) {
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local') return;
+        if (changes.autoApplyAnswers) {
+          this.updateAutoApplyToggle();
+        }
+      });
+      this.storageListenerBound = true;
     }
 
     // 拖拽功能

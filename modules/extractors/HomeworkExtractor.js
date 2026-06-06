@@ -3,7 +3,9 @@ const HomeworkExtractor = {
   // Check if current page is supported
   canHandle(url) {
     return url.includes('/mycourse/studentstudy') || 
-           url.includes('chaoxing.com') && !url.includes('/exam/');
+           url.includes('/mooc-ans/mooc2/work/dowork') ||
+           url.includes('/work/dowork') ||
+           (url.includes('chaoxing.com') && !url.includes('/exam/'));
   },
 
   normalizeText(value = '') {
@@ -23,6 +25,8 @@ const HomeworkExtractor = {
   detectType(container, options = []) {
     const rawType = this.getTypeLabel(container);
 
+    if (rawType.includes('填空')) return 'fill_blank';
+    if (rawType.includes('简答')) return 'short_answer';
     if (rawType.includes('多选')) return 'multi';
     if (rawType.includes('单选') || rawType.includes('判断')) return 'single';
     if (options.length === 4) return 'single';

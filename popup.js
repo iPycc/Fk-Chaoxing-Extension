@@ -10,6 +10,8 @@ class PopupController {
     
     this.btnExtractAuto = document.getElementById('btn-extract-auto');
     this.btnAiAnswer = document.getElementById('btn-ai-answer');
+    this.btnAutoApplyToggle = document.getElementById('btn-auto-apply-toggle');
+    this.btnAutoApplyText = document.getElementById('btn-auto-apply-text');
     this.btnAiText = document.getElementById('btn-ai-text');
     this.btnAiIcon = document.getElementById('btn-ai-icon');
     this.btnAiIconDefault = document.getElementById('btn-ai-icon-default');
@@ -29,6 +31,7 @@ class PopupController {
     
     this.currentTab = null;
     this.isEnabled = true;
+    this.autoApplyAnswers = false;
     this.aiProfiles = [];
     this.activeAiProfileId = null;
     
@@ -38,6 +41,7 @@ class PopupController {
   async init() {
     this.log('info', '控制面板已加载');
     await this.loadPluginState();
+    await this.loadAutoApplyState();
     await this.loadAiProfiles();
     await this.getCurrentTab();
     await this.detectPageType();
@@ -45,6 +49,28 @@ class PopupController {
     await this.updateQuestionCount();
     this.bindEvents();
     this.startLogListener();
+    
+    // 检测是否有草稿，有则自动打开配置模态窗
+    await this.checkAndOpenDraftModal();
+  }
+
+  // 检测是否有未保存的草稿，有则自动打开配置模态窗
+  async checkAndOpenDraftModal() {
+    const data = await chrome.storage.local.get(['aiProfiles', 'aiConfigDraft']);
+    const hasProfiles = Array.isArray(data.aiProfiles) && data.aiProfiles.length > 0;
+    const hasDraft = data.aiConfigDraft && (
+      data.aiConfigDraft.name || 
+      data.aiConfigDraft.baseUrl || 
+      data.aiConfigDraft.apiKey || 
+      data.aiConfigDraft.model
+    );
+    
+    // 如果有草稿且没有有效配置，自动打开配置模态窗
+    if (hasDraft && !hasProfiles) {
+      this.aiConfigModal.hidden = false;
+      this.fillAiProfileFormFromDraft(data.aiConfigDraft);
+      this.log('info', '检测到未保存的配置草稿，已自动打开');
+    }
   }
 
   getDefaultAiProfile() {
@@ -84,41 +110,138 @@ class PopupController {
   }
 
   async loadAiProfiles() {
-    const data = await chrome.storage.local.get(['aiProfiles', 'activeAiProfileId', 'aiConfig']);
+    const data = await chrome.storage.local.get(['aiProfiles', 'activeAiProfileId', 'aiConfig', 'aiConfigDraft']);
     const storedProfiles = Array.isArray(data.aiProfiles) ? data.aiProfiles : [];
     this.aiProfiles = storedProfiles.map(profile => this.normalizeAiProfile(profile));
 
+    // 如果没有配置，不创建默认空配置，而是显示引导
     if (this.aiProfiles.length === 0) {
-      const legacyConfig = data.aiConfig ? this.normalizeAiProfile(data.aiConfig) : this.getDefaultAiProfile();
-      this.aiProfiles = [legacyConfig];
+      // 检查是否有旧版配置需要迁移
+      if (data.aiConfig) {
+        const legacyConfig = this.normalizeAiProfile(data.aiConfig);
+        this.aiProfiles = [legacyConfig];
+        await this.persistAiProfiles();
+      }
     }
 
-    this.activeAiProfileId = data.activeAiProfileId || this.aiProfiles[0].id;
+    this.activeAiProfileId = data.activeAiProfileId;
     if (!this.aiProfiles.some(profile => profile.id === this.activeAiProfileId)) {
-      this.activeAiProfileId = this.aiProfiles[0].id;
+      this.activeAiProfileId = this.aiProfiles.length > 0 ? this.aiProfiles[0].id : null;
     }
 
     this.renderAiProfileOptions();
-    this.fillAiProfileForm(this.getActiveAiProfile());
+    
+    // 如果有草稿，恢复草稿
+    if (data.aiConfigDraft && !this.activeAiProfileId) {
+      this.fillAiProfileFormFromDraft(data.aiConfigDraft);
+    } else if (this.activeAiProfileId) {
+      this.fillAiProfileForm(this.getActiveAiProfile());
+    } else {
+      // 首次使用，显示引导
+      this.showFirstTimeGuide();
+    }
+    
     this.updateAiAnswerButton();
   }
 
+  // 首次使用引导
+  showFirstTimeGuide() {
+    this.aiProfileSelect.innerHTML = '<option value="">请先添加模型</option>';
+    this.aiProfileSelect.value = '';
+    this.btnAiConfigDelete.disabled = true;
+    
+    // 清空表单显示引导占位符
+    this.aiProfileName.value = '';
+    this.aiProfileName.placeholder = '如：OpenAI / Kimi / 本地模型';
+    this.aiBaseUrl.value = '';
+    this.aiBaseUrl.placeholder = 'https://api.openai.com/v1';
+    this.aiApiKey.value = '';
+    this.aiApiKey.placeholder = 'sk-...';
+    this.aiModelId.value = '';
+    this.aiModelId.placeholder = 'gpt-3.5-turbo';
+    this.aiApiPath.value = '/chat/completions';
+    this.aiTemperature.value = '0.3';
+    
+    this.log('info', '首次使用，请点击"配置"添加 AI 模型');
+  }
+
+  // 从草稿填充表单
+  fillAiProfileFormFromDraft(draft) {
+    this.aiProfileName.value = draft.name || '';
+    this.aiBaseUrl.value = draft.baseUrl || '';
+    this.aiApiKey.value = draft.apiKey || '';
+    this.aiModelId.value = draft.model || '';
+    this.aiApiPath.value = draft.path || '/chat/completions';
+    this.aiTemperature.value = draft.temperature !== undefined ? draft.temperature : 0.3;
+  }
+
+  // 保存表单草稿
+  async saveFormDraft() {
+    const draft = {
+      name: this.aiProfileName.value,
+      baseUrl: this.aiBaseUrl.value,
+      apiKey: this.aiApiKey.value,
+      model: this.aiModelId.value,
+      path: this.aiApiPath.value,
+      temperature: this.aiTemperature.value
+    };
+    await chrome.storage.local.set({ aiConfigDraft: draft });
+  }
+
+  // 清除草稿
+  async clearFormDraft() {
+    await chrome.storage.local.remove('aiConfigDraft');
+  }
+
+  async loadAutoApplyState() {
+    const data = await chrome.storage.local.get('autoApplyAnswers');
+    this.autoApplyAnswers = data.autoApplyAnswers === true;
+    this.updateAutoApplyButton();
+  }
+
+  updateAutoApplyButton() {
+    if (!this.btnAutoApplyToggle || !this.btnAutoApplyText) return;
+    this.btnAutoApplyText.textContent = `自动作答：${this.autoApplyAnswers ? '开启' : '关闭'}`;
+    this.btnAutoApplyToggle.classList.toggle('active', this.autoApplyAnswers);
+    this.btnAutoApplyToggle.title = this.autoApplyAnswers
+      ? '当前会自动将 AI 答案写入编辑器'
+      : '当前只显示 AI 返回答案，不自动填写';
+  }
+
   getActiveAiProfile() {
-    return this.aiProfiles.find(profile => profile.id === this.activeAiProfileId) || this.aiProfiles[0] || this.getDefaultAiProfile();
+    if (this.aiProfiles.length === 0) {
+      return null;
+    }
+    return this.aiProfiles.find(profile => profile.id === this.activeAiProfileId) || this.aiProfiles[0];
   }
 
   renderAiProfileOptions() {
     this.aiProfileSelect.innerHTML = '';
+    
+    if (this.aiProfiles.length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = '请先添加模型';
+      this.aiProfileSelect.appendChild(option);
+      this.aiProfileSelect.value = '';
+      return;
+    }
+    
     this.aiProfiles.forEach(profile => {
       const option = document.createElement('option');
       option.value = profile.id;
       option.textContent = profile.name || profile.model || '未命名模型';
       this.aiProfileSelect.appendChild(option);
     });
-    this.aiProfileSelect.value = this.activeAiProfileId;
+    this.aiProfileSelect.value = this.activeAiProfileId || '';
   }
 
   fillAiProfileForm(profile) {
+    if (!profile) {
+      this.showFirstTimeGuide();
+      return;
+    }
+    
     const normalized = this.normalizeAiProfile(profile);
     this.aiProfileName.value = normalized.name || '';
     this.aiBaseUrl.value = normalized.baseUrl || '';
@@ -132,6 +255,16 @@ class PopupController {
 
   updateAiAnswerButton() {
     const profile = this.getActiveAiProfile();
+    
+    // 如果没有有效配置，显示引导
+    if (!profile || !profile.baseUrl) {
+      this.btnAiText.textContent = '请先配置 AI 模型';
+      this.btnAiIcon.style.display = 'none';
+      this.btnAiIconDefault.style.display = 'inline-block';
+      this.btnAiAnswer.disabled = !this.isEnabled;
+      return;
+    }
+    
     const modelName = profile.name || profile.model || 'AI';
     this.btnAiText.textContent = `使用 ${modelName} 答题`;
     
@@ -169,8 +302,10 @@ class PopupController {
   }
 
   readAiProfileForm(id = this.activeAiProfileId) {
+    // 如果没有选中模型，生成新ID
+    const profileId = id || `model-${Date.now()}`;
     return this.normalizeAiProfile({
-      id,
+      id: profileId,
       name: this.aiProfileName.value,
       baseUrl: this.aiBaseUrl.value,
       path: this.aiApiPath.value,
@@ -279,6 +414,7 @@ class PopupController {
       }
       this.activeAiProfileId = profile.id;
       await this.persistAiProfiles();
+      await this.clearFormDraft(); // 保存成功后清除草稿
       this.renderAiProfileOptions();
       this.fillAiProfileForm(profile);
       this.log('success', `保存成功，连接测试通过：${profile.name}`);
@@ -292,35 +428,51 @@ class PopupController {
     }
   }
 
-  createAiProfile() {
+  async createAiProfile() {
+    // 先保存当前表单为草稿
+    await this.saveFormDraft();
+    
     const profile = this.normalizeAiProfile({
       id: `model-${Date.now()}`,
       name: `新模型 ${this.aiProfiles.length + 1}`,
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl: '',
       path: '/chat/completions',
       apiKey: '',
       model: ''
     });
     this.aiProfiles.push(profile);
     this.activeAiProfileId = profile.id;
+    await this.persistAiProfiles();
     this.renderAiProfileOptions();
     this.fillAiProfileForm(profile);
     this.log('info', '已创建新模型配置，请填写后保存');
   }
 
   async deleteAiProfile() {
-    if (this.aiProfiles.length <= 1) {
-      this.log('warning', '至少需要保留一个 AI 模型配置');
+    if (this.aiProfiles.length === 0) {
       return;
     }
 
     const removed = this.getActiveAiProfile();
     this.aiProfiles = this.aiProfiles.filter(profile => profile.id !== this.activeAiProfileId);
-    this.activeAiProfileId = this.aiProfiles[0].id;
+    
+    if (this.aiProfiles.length > 0) {
+      this.activeAiProfileId = this.aiProfiles[0].id;
+    } else {
+      this.activeAiProfileId = null;
+    }
+    
     await this.persistAiProfiles();
     this.renderAiProfileOptions();
-    this.fillAiProfileForm(this.getActiveAiProfile());
-    this.log('success', `已删除 AI 模型配置：${removed.name}`);
+    
+    if (this.activeAiProfileId) {
+      this.fillAiProfileForm(this.getActiveAiProfile());
+    } else {
+      this.showFirstTimeGuide();
+    }
+    
+    this.updateAiAnswerButton();
+    this.log('success', `已删除 AI 模型配置：${removed ? removed.name : ''}`);
   }
 
   // 切换插件开关状态
@@ -341,6 +493,14 @@ class PopupController {
     const disabled = !this.isEnabled;
     this.btnExtractAuto.disabled = disabled;
     this.btnAiAnswer.disabled = disabled;
+    this.btnAutoApplyToggle.disabled = disabled;
+  }
+
+  async toggleAutoApplyState() {
+    this.autoApplyAnswers = !this.autoApplyAnswers;
+    await chrome.storage.local.set({ autoApplyAnswers: this.autoApplyAnswers });
+    this.updateAutoApplyButton();
+    this.log('info', this.autoApplyAnswers ? '自动作答已开启，AI 答案会自动写入编辑器' : '自动作答已关闭，AI 仅展示返回答案');
   }
 
   // 获取当前标签页
@@ -387,6 +547,8 @@ class PopupController {
 
     if (url.includes('/exam-ans/mooc2/exam/preview')) {
       this.log('info', '检测到考试页面');
+    } else if (url.includes('/mooc-ans/mooc2/work/dowork') || url.includes('/work/dowork')) {
+      this.log('info', '检测到作业作答页面');
     } else if (url.includes('/mycourse/studentstudy')) {
       this.log('info', '检测到作业/章节页面');
     } else if (url.includes('chaoxing.com')) {
@@ -417,18 +579,45 @@ class PopupController {
       this.aiAnswer();
     });
 
-    this.btnAiConfigOpen.addEventListener('click', () => {
+    this.btnAutoApplyToggle.addEventListener('click', () => {
+      this.toggleAutoApplyState();
+    });
+
+    this.btnAiConfigOpen.addEventListener('click', async () => {
       this.aiConfigModal.hidden = false;
+      
+      // 如果没有有效配置，尝试恢复草稿
+      if (!this.activeAiProfileId || !this.getActiveAiProfile()) {
+        const data = await chrome.storage.local.get('aiConfigDraft');
+        if (data.aiConfigDraft) {
+          this.fillAiProfileFormFromDraft(data.aiConfigDraft);
+          this.log('info', '已恢复上次未保存的配置');
+        }
+      }
     });
 
     this.btnAiConfigClose.addEventListener('click', () => {
       this.aiConfigModal.hidden = true;
     });
 
-    this.aiProfileSelect.addEventListener('change', () => {
-      this.activeAiProfileId = this.aiProfileSelect.value;
-      this.fillAiProfileForm(this.getActiveAiProfile());
-      this.persistAiProfiles();
+    this.aiProfileSelect.addEventListener('change', async () => {
+      // 切换模型前保存当前表单为草稿
+      await this.saveFormDraft();
+      
+      this.activeAiProfileId = this.aiProfileSelect.value || null;
+      await this.persistAiProfiles();
+      
+      if (this.activeAiProfileId) {
+        this.fillAiProfileForm(this.getActiveAiProfile());
+      } else {
+        // 尝试从草稿恢复
+        const data = await chrome.storage.local.get('aiConfigDraft');
+        if (data.aiConfigDraft) {
+          this.fillAiProfileFormFromDraft(data.aiConfigDraft);
+        } else {
+          this.showFirstTimeGuide();
+        }
+      }
     });
 
     this.btnAiProfileNew.addEventListener('click', () => {
@@ -441,6 +630,24 @@ class PopupController {
 
     this.btnAiConfigDelete.addEventListener('click', () => {
       this.deleteAiProfile();
+    });
+
+    // 表单输入时自动保存草稿
+    const formInputs = [
+      this.aiProfileName,
+      this.aiBaseUrl,
+      this.aiApiKey,
+      this.aiModelId,
+      this.aiApiPath,
+      this.aiTemperature
+    ];
+    
+    formInputs.forEach(input => {
+      if (input) {
+        input.addEventListener('input', () => {
+          this.saveFormDraft();
+        });
+      }
     });
 
     // 清空日志
@@ -498,6 +705,14 @@ class PopupController {
   // AI 答题
   async aiAnswer() {
     if (!this.isEnabled) return;
+    
+    // 检查是否有有效配置
+    const profile = this.getActiveAiProfile();
+    if (!profile || !profile.baseUrl) {
+      this.log('warning', '请先配置 AI 模型');
+      this.aiConfigModal.hidden = false;
+      return;
+    }
     
     const btn = this.btnAiAnswer;
     const icon = btn.querySelector('i');
