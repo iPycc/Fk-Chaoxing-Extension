@@ -40,7 +40,7 @@
    * Prevents default behavior and inserts text at cursor position
    * @param {ClipboardEvent} e - Paste event
    */
-  function handlePaste(e) {
+  function handlePaste(e, instance) {
     e.preventDefault();
     e.stopPropagation();
     
@@ -53,6 +53,8 @@
     
     if (text) {
       insertText(doc, text);
+      syncUEditorContent(instance);
+      setTimeout(() => syncUEditorContent(instance), 0);
     }
   }
 
@@ -87,6 +89,92 @@
     return false;
   }
 
+  function dispatchChangeEvents(target) {
+    if (!target?.dispatchEvent) return;
+
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function normalizeEditorHtml(html) {
+    const normalized = String(html || '').trim();
+    const plainText = normalized
+      .replace(/<br\s*\/?>/gi, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .trim();
+
+    return plainText ? normalized : '<p><br/></p>';
+  }
+
+  function getInstanceDocument(instance) {
+    return instance?.textarea?.ownerDocument
+      || instance?.container?.ownerDocument
+      || instance?.iframe?.ownerDocument
+      || document;
+  }
+
+  function syncBlankPreview(textarea, html) {
+    if (!textarea) return;
+
+    textarea.value = html;
+    textarea.textContent = html;
+    dispatchChangeEvents(textarea);
+
+    if (!textarea.id) return;
+
+    const inputDivId = textarea.id.replace(/^answerEditor/, 'inpDiv');
+    const inputDiv = textarea.ownerDocument?.getElementById(inputDivId);
+    if (inputDiv) {
+      inputDiv.innerHTML = html;
+    }
+  }
+
+  function syncUEditorContent(instance) {
+    if (!instance) return;
+
+    let html = '';
+    try {
+      html = typeof instance.getContent === 'function'
+        ? instance.getContent()
+        : instance.body?.innerHTML || '';
+    } catch (err) {
+      html = instance.body?.innerHTML || '';
+    }
+
+    html = normalizeEditorHtml(html);
+
+    try {
+      if (typeof instance.sync === 'function') {
+        instance.sync();
+      }
+    } catch (err) {
+      // 忽略同步异常，继续手动补齐显示层
+    }
+
+    let textarea = instance.textarea || null;
+    const ownerDoc = getInstanceDocument(instance);
+    if (!textarea && instance.key) {
+      textarea = ownerDoc.getElementById(instance.key);
+    }
+    if (!textarea && instance.container) {
+      textarea = instance.container.parentElement?.querySelector(
+        'textarea[id^="answerEditor"], textarea[id^="answer"]:not([id^="answertype"])'
+      ) || null;
+    }
+
+    syncBlankPreview(textarea, html);
+
+    try {
+      if (typeof instance.fireEvent === 'function') {
+        instance.fireEvent('contentChange');
+        instance.fireEvent('selectionchange');
+      }
+    } catch (err) {
+      // 忽略事件触发异常
+    }
+  }
+
   /**
    * Process a single UEditor instance
    * Enables paste functionality and removes restrictions
@@ -111,16 +199,24 @@
       // 处理编辑器主体 (instance.body)
       if (instance.body && !instance.body.__cxPasteEnabled) {
         removeElementRestrictions(instance.body);
-        instance.body.addEventListener('paste', handlePaste, true);
+        instance.body.addEventListener('paste', event => handlePaste(event, instance), true);
         instance.body.__cxPasteEnabled = true;
+      }
+      if (instance.body && !instance.body.__cxBlurSyncEnabled) {
+        instance.body.addEventListener('blur', () => syncUEditorContent(instance), true);
+        instance.body.__cxBlurSyncEnabled = true;
       }
 
       // 处理 iframe 文档 (instance.iframe?.contentDocument)
       const iframeDoc = instance.iframe?.contentDocument;
       if (iframeDoc && !iframeDoc.__cxPasteEnabled) {
         removeElementRestrictions(iframeDoc.body);
-        iframeDoc.addEventListener('paste', handlePaste, true);
+        iframeDoc.addEventListener('paste', event => handlePaste(event, instance), true);
         iframeDoc.__cxPasteEnabled = true;
+      }
+      if (iframeDoc && !iframeDoc.__cxBlurSyncEnabled) {
+        iframeDoc.addEventListener('blur', () => syncUEditorContent(instance), true);
+        iframeDoc.__cxBlurSyncEnabled = true;
       }
     } catch (err) {
       // Silently handle errors
