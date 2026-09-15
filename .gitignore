@@ -1,3 +1,6 @@
 .env
 超星dom/
 cx-dom/
+
+.idea/
+tests/

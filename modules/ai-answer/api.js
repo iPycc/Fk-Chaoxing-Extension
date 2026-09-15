@@ -17,7 +17,8 @@ const AIApi = {
         type: question.type,
         title: question.title,
         blankCount: question.blankCount || 0,
-        options: Array.isArray(question.options) ? question.options : []
+        options: Array.isArray(question.options) ? question.options : [],
+        ...(question.type === 'matching' ? { matchingGroups: question.matchingGroups } : {})
       }))
     };
 
@@ -30,7 +31,9 @@ const AIApi = {
       '    { "questionIndex": 1, "type": "fill_blank", "answers": ["答案1", "答案2"] },',
       '    { "questionIndex": 2, "type": "single_choice", "answer": "A" },',
       '    { "questionIndex": 3, "type": "multiple_choice", "answers": ["A", "C"] },',
-      '    { "questionIndex": 4, "type": "short_answer", "answer": "简洁答案" }',
+      '    { "questionIndex": 4, "type": "short_answer", "answer": "简洁答案" },',
+      '    { "questionIndex": 5, "type": "sorting", "answers": ["C", "B", "A"] },',
+      '    { "questionIndex": 6, "type": "matching", "pairs": [{"left": "1", "right": "B"}, {"left": "2", "right": "A"}] }',
       '  ]',
       '}',
       '',
@@ -39,6 +42,8 @@ const AIApi = {
       '- `single_choice` 必须返回 `answer` 字段，只能是单个大写选项字母，例如 A。',
       '- `multiple_choice` 必须返回 `answers` 数组，数组元素必须是大写选项字母。',
       '- `short_answer` 必须返回 `answer` 字段，内容简洁直接，不要带题号。',
+      '- `sorting` 必须返回 `answers` 数组，按题目要求从左到右排列全部选项字母，每个选项恰好一次，禁止按字母重新排序。',
+      '- `matching` 必须返回 `pairs` 数组，left 使用第1组的显示编号，right 使用第2组的显示字母；每个左侧项目恰好一次，右侧选项可重复。',
       '- 如果无法确定，请尽量给出最可能答案，但仍然必须遵守 JSON 结构。',
       '',
       '题目数据如下：',
@@ -47,16 +52,7 @@ const AIApi = {
   },
 
   normalizeConfig(config = {}) {
-    const merged = { ...this.DEFAULT_CONFIG, ...config };
-    merged.baseUrl = (merged.baseUrl || '').trim().replace(/\/+$/, '');
-    merged.path = (merged.path || '/chat/completions').trim();
-    if (!merged.path.startsWith('/')) {
-      merged.path = `/${merged.path}`;
-    }
-    merged.apiKey = (merged.apiKey || '').trim();
-    merged.model = (merged.model || '').trim();
-    merged.temperature = Number.isFinite(Number(merged.temperature)) ? Number(merged.temperature) : this.DEFAULT_CONFIG.temperature;
-    return merged;
+    return AIConfig.normalize({ ...this.DEFAULT_CONFIG, ...config, path: config.path || AIConfig.defaultPath(config.apiType) });
   },
 
   async loadConfig() {
@@ -78,9 +74,9 @@ const AIApi = {
     }
   },
 
-  async getAnswers(questions) {
+  async getAnswers(questions, requestConfig) {
     const prompt = this.buildPrompt(questions);
-    const config = await this.loadConfig();
+    const config = requestConfig ? this.normalizeConfig(requestConfig) : await this.loadConfig();
     this.validateConfig(config);
 
     return new Promise((resolve, reject) => {
@@ -142,6 +138,17 @@ const AIApi = {
     };
 
     switch (question.type) {
+      case 'sorting':
+      case 'matching': {
+        const normalized = question.type === 'sorting'
+          ? { ...base, answers: Array.isArray(entry.answers) ? entry.answers.map(value => String(value ?? '').trim().toUpperCase()) : [] }
+          : { ...base, pairs: Array.isArray(entry.pairs) ? entry.pairs.map(pair => ({
+              left: String(pair?.left ?? '').trim(),
+              right: String(pair?.right ?? '').trim().toUpperCase()
+            })) : [] };
+        const error = DropdownQuestions.validateAnswer(question, normalized);
+        return error ? { ...normalized, error } : normalized;
+      }
       case 'fill_blank': {
         const answers = Array.isArray(entry.answers)
           ? entry.answers.map(item => String(item ?? '').trim())

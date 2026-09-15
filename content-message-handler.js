@@ -24,7 +24,7 @@ const ContentMessageHandler = {
           break;
         
         case 'aiAnswer':
-          await this.handleAIAnswer(sendResponse);
+          await this.handleAIAnswer(sendResponse, request.config);
           break;
 
         case 'insertTestAnswer':
@@ -102,7 +102,7 @@ const ContentMessageHandler = {
   },
 
   // 处理 AI 答题请求
-  async handleAIAnswer(sendResponse) {
+  async handleAIAnswer(sendResponse, config) {
     try {
       if (window.self !== window.top) return;
 
@@ -114,7 +114,7 @@ const ContentMessageHandler = {
       }
 
       // 调用 AI 答题核心逻辑
-      await AIAnswerCore.processAllQuestions();
+      await AIAnswerCore.processAllQuestions(config);
 
       // 获取题目数量
       const questions = await AIAnswerCore.collectQuestions();

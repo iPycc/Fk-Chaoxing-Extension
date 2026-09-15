@@ -23,6 +23,8 @@ const HomeworkExtractor = {
   },
 
   detectType(container, options = []) {
+    const dropdownType = DropdownQuestions.detectType(container);
+    if (dropdownType) return dropdownType;
     const rawType = this.getTypeLabel(container);
 
     if (rawType.includes('填空')) return 'fill_blank';
@@ -51,10 +53,12 @@ const HomeworkExtractor = {
     const typeLabel = this.getTypeLabel(container);
     const stem = this.normalizeText(titleEl?.textContent || '')
       .replace(/^\d+\.\s*/, '')
-      .replace(/^\((?:单选题|多选题|判断题|填空题|简答题)\)\s*/, '');
+      .replace(/^\((?:单选题|多选题|判断题|填空题|简答题|排序题|连线题)\)\s*/, '');
     const title = this.normalizeText(`${typeLabel} ${stem}`);
 
     if (!title) return null;
+    const dropdown = DropdownQuestions.extract(container);
+    if (dropdown) return { title, ...dropdown };
 
     const options = this.sortOptions(Array.from(container.querySelectorAll('.stem_answer .answerBg')).map((el, idx) => {
       const letter = this.getOptionLetter(idx);
