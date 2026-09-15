@@ -56,6 +56,9 @@ const ExamExtractor = {
     const typeLabel = this.getTypeLabel(container);
     const title = this.normalizeText(`${typeLabel} ${stem}`);
     
+    const dropdown = DropdownQuestions.extract(container);
+    if (dropdown) return { title, ...dropdown };
+
     // Extract options
     const options = this.extractOptions(container);
     
@@ -76,7 +79,7 @@ const ExamExtractor = {
     return this.normalizeText(titleEl?.textContent || '')
       .trim()
       .replace(/^\d+\.\s*/, '')
-      .replace(/^\((?:单选题|多选题|判断题|填空题|简答题)\)\s*/, '');
+      .replace(/^\((?:单选题|多选题|判断题|填空题|简答题|排序题|连线题)\)\s*/, '');
   },
   
   // Extract exam question options

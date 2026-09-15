@@ -33,6 +33,7 @@
         "modules/logger.js",
         "modules/ui/Toast.js",
         "modules/ui/Modal.js",
+        "modules/extractors/DropdownQuestions.js",
         "modules/extractors/HomeworkExtractor.js",
         "modules/extractors/ExamExtractor.js",
         "modules/services/QuestionCollector.js",

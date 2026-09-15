@@ -104,6 +104,12 @@ const QuestionCollector = {
           if (Array.isArray(q.options) && q.options.length) {
             q.options.forEach(opt => lines.push(opt));
           }
+          if (q.type === 'matching' && q.matchingGroups) {
+            lines.push('第1组：');
+            q.matchingGroups.left.forEach(item => lines.push(`${item.id}. ${item.text}`));
+            lines.push('第2组：');
+            q.matchingGroups.right.forEach(item => lines.push(`${item.id}. ${item.text}`));
+          }
           lines.push('');
         });
       }
