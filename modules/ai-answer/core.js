@@ -2,7 +2,7 @@
 const AIAnswerCore = {
   isProcessing: false,
 
-  async processAllQuestions() {
+  async processAllQuestions(requestConfig) {
     if (this.isProcessing) {
       AINotify.warning('正在处理中，请稍候...');
       return;
@@ -22,13 +22,13 @@ const AIAnswerCore = {
 
       AINotify.success(`找到 ${questions.length} 道题目`);
 
-      const config = await AIApi.loadConfig();
+      const config = requestConfig ? AIApi.normalizeConfig(requestConfig) : await AIApi.loadConfig();
       AIApi.validateConfig(config);
       await AINotify.init();
       AINotify.updateModelSelect();
 
       AINotify.info('正在发送到 AI 分析...');
-      const responseText = await AIApi.getAnswers(questions);
+      const responseText = await AIApi.getAnswers(questions, config);
       AINotify.success('AI 返回答案成功');
 
       const answers = AIApi.parseAnswers(responseText, questions);

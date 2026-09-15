@@ -23,7 +23,7 @@ Chrome 扩展，为超星学习通提供一键复制、字体解密、AI 自动�
 - MutationObserver + postMessage 跨 iframe 通信
 - Chrome `storage.local` 本地配置持久化
 - Chrome `permissions` + `optional_host_permissions` 动态申请 AI 接口域名权限
-- OpenAI 兼容 Chat Completions API
+- OpenAI 兼容 Chat Completions / Responses API
 
 ## 项目结构
 
@@ -97,13 +97,21 @@ Fk-Chaoxing-Extension/
 | **API 地址** | AI 服务的 base URL | `https://api.openai.com/v1` |
 | **API Key** | 你的 API 密钥 | `sk-xxxxxxxxxxxxxxxx` |
 | **模型 ID** | 要使用的模型名称 | `model-id` |
-| **请求路径** | 通常保持默认 | `/chat/completions` |
-| **温度系数** | 控制输出随机性，0-2之间 | `0.3` |
+| **API 类型** | 每个模型配置独立选择协议 | `Chat Completions` / `Responses` |
+| **请求路径** | 随 API 类型切换标准路径，自定义路径保留 | `/chat/completions` / `/responses` |
+| **默认思考等级** | 使用模型默认、不思考、Low、Medium、High、XHigh、Max | `High` |
+| **温度系数** | 0–2，可留空；显式指定思考等级时禁用并省略 | `0.3` |
+
+“使用模型默认”不发送思考参数；“不思考”发送 `none`。其余等级发送对应的小写值，Max 不会转换成 XHigh。模型或服务商不支持所选等级时会显示错误，请手动调整。旧配置继续使用 Chat Completions 和模型默认思考等级。
+
+主面板的“本次思考等级”可以临时覆盖配置默认值。重新打开面板、切换模型或本次请求结束后会恢复默认；本次请求启动后，切换模型不会改变已发起的请求。
+
+Responses 使用非流式请求（`store: false`），提取最终答案文本后沿用原有答案展示与填写流程，不展示推理过程。
 
 #### 步骤 3：保存并测试
 
 1. 点击"保存"按钮
-2. 插件会自动测试连接，确保配置正确
+2. 插件使用所选协议和配置默认思考等级自动测试连接（发送“仅回复 OK”），此测试会调用模型并可能产生费用
 3. 如果测试通过，配置将被保存
 
 #### 步骤 4：多模型管理（可选）
@@ -168,3 +176,9 @@ Fk-Chaoxing-Extension/
 
 欢迎提交 Issue 和 PR！如果你发现新的超星页面结构不被支持，请提供相关 HTML 片段以便适配。
 
+
+### 开发验证
+
+运行 `node --test tests/*.test.cjs` 执行配置、协议适配和界面消息流程的模拟测试，无需 API Key。
+
+安装 Playwright 后，可运行 `node tests/popup-browser.cjs` 检查真实浏览器中的弹窗交互；设置 `CHROME_PATH` 可指定 Chrome 可执行文件。此检查模拟 Chrome 扩展接口和网络结果，不调用真实模型。

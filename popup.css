@@ -552,3 +552,18 @@ input:checked + .slider:before {
   background: var(--bg-mute);
   border: 1px dashed var(--border);
 }
+
+.quick-reasoning {
+  margin-bottom: var(--space-3);
+}
+
+.quick-reasoning-help {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.form-control:disabled {
+  background: var(--bg-mute);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}

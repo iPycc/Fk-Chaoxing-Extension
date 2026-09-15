@@ -39,6 +39,7 @@
         "modules/PasteEnabler.js",
         "modules/CopyEnabler.js",
         "modules/UEditorUnlock.js",
+        "modules/ai-answer/config.js",
         "modules/ai-answer/api.js",
         "modules/ai-answer/ui.js",
         "modules/ai-answer/core.js",

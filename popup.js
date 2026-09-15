@@ -25,6 +25,9 @@ class PopupController {
     this.aiModelId = document.getElementById('ai-model-id');
     this.aiApiPath = document.getElementById('ai-api-path');
     this.aiTemperature = document.getElementById('ai-temperature');
+    this.aiApiType = document.getElementById('ai-api-type');
+    this.aiReasoningEffort = document.getElementById('ai-reasoning-effort');
+    this.aiQuickReasoning = document.getElementById('ai-quick-reasoning');
     this.btnAiProfileNew = document.getElementById('btn-ai-profile-new');
     this.btnAiConfigSave = document.getElementById('btn-ai-config-save');
     this.btnAiConfigDelete = document.getElementById('btn-ai-config-delete');
@@ -81,23 +84,17 @@ class PopupController {
       path: '/chat/completions',
       apiKey: '',
       model: '',
-      temperature: 0.3
+      temperature: 0.3,
+      apiType: 'chat_completions',
+      reasoningEffort: ''
     };
   }
 
   normalizeAiProfile(profile = {}) {
     const defaults = this.getDefaultAiProfile();
-    const normalized = { ...defaults, ...profile };
+    const normalized = AIConfig.normalize({ ...defaults, ...profile, path: profile.path || AIConfig.defaultPath(profile.apiType) });
     normalized.id = normalized.id || `model-${Date.now()}`;
     normalized.name = (normalized.name || normalized.model || defaults.name).trim();
-    normalized.baseUrl = (normalized.baseUrl || '').trim().replace(/\/+$/, '');
-    normalized.path = (normalized.path || defaults.path).trim();
-    if (!normalized.path.startsWith('/')) {
-      normalized.path = `/${normalized.path}`;
-    }
-    normalized.apiKey = (normalized.apiKey || '').trim();
-    normalized.model = (normalized.model || '').trim();
-    normalized.temperature = Number.isFinite(Number(normalized.temperature)) ? Number(normalized.temperature) : defaults.temperature;
     return normalized;
   }
 
@@ -161,6 +158,10 @@ class PopupController {
     this.aiModelId.placeholder = 'gpt-3.5-turbo';
     this.aiApiPath.value = '/chat/completions';
     this.aiTemperature.value = '0.3';
+    this.aiApiType.value = 'chat_completions';
+    this.aiReasoningEffort.value = '';
+    this.updateTemperatureState();
+    this.resetQuickReasoning();
     
     this.log('info', '首次使用，请点击"配置"添加 AI 模型');
   }
@@ -171,8 +172,11 @@ class PopupController {
     this.aiBaseUrl.value = draft.baseUrl || '';
     this.aiApiKey.value = draft.apiKey || '';
     this.aiModelId.value = draft.model || '';
-    this.aiApiPath.value = draft.path || '/chat/completions';
-    this.aiTemperature.value = draft.temperature !== undefined ? draft.temperature : 0.3;
+    this.aiApiPath.value = draft.path || AIConfig.defaultPath(draft.apiType);
+    this.aiTemperature.value = draft.temperature !== undefined ? (draft.temperature ?? '') : 0.3;
+    this.aiApiType.value = draft.apiType || 'chat_completions';
+    this.aiReasoningEffort.value = draft.reasoningEffort || '';
+    this.updateTemperatureState();
   }
 
   // 保存表单草稿
@@ -183,6 +187,8 @@ class PopupController {
       apiKey: this.aiApiKey.value,
       model: this.aiModelId.value,
       path: this.aiApiPath.value,
+      apiType: this.aiApiType.value,
+      reasoningEffort: this.aiReasoningEffort.value,
       temperature: this.aiTemperature.value
     };
     await chrome.storage.local.set({ aiConfigDraft: draft });
@@ -248,7 +254,11 @@ class PopupController {
     this.aiApiKey.value = normalized.apiKey || '';
     this.aiModelId.value = normalized.model || '';
     this.aiApiPath.value = normalized.path || '/chat/completions';
-    this.aiTemperature.value = normalized.temperature !== undefined ? normalized.temperature : 0.3;
+    this.aiTemperature.value = normalized.temperature ?? '';
+    this.aiApiType.value = normalized.apiType;
+    this.aiReasoningEffort.value = normalized.reasoningEffort;
+    this.updateTemperatureState();
+    this.resetQuickReasoning();
     this.btnAiConfigDelete.disabled = this.aiProfiles.length <= 1;
     this.updateAiAnswerButton();
   }
@@ -311,6 +321,8 @@ class PopupController {
       path: this.aiApiPath.value,
       apiKey: this.aiApiKey.value,
       model: this.aiModelId.value,
+      apiType: this.aiApiType.value,
+      reasoningEffort: this.aiReasoningEffort.value,
       temperature: this.aiTemperature.value
     });
   }
@@ -352,44 +364,20 @@ class PopupController {
   }
 
   async testAiConnection(profile) {
-    const url = `${profile.baseUrl.replace(/\/+$/, '')}${profile.path}`;
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${profile.apiKey}`
-    };
-    const body = JSON.stringify({
-      model: profile.model,
-      messages: [{ role: 'user', content: 'hi' }],
-      max_tokens: 1 // 用最少的 token 进行测试
+    const response = await chrome.runtime.sendMessage({
+      type: 'AI_API_REQUEST',
+      data: { config: profile, messages: [{ role: 'user', content: '仅回复 OK' }] }
     });
+    if (!response?.success) throw new Error(response?.error || '连接测试失败');
+    return true;
+  }
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body
-      });
+  updateTemperatureState() {
+    this.aiTemperature.disabled = this.aiReasoningEffort.value !== '';
+  }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMsg = `HTTP ${response.status} ${response.statusText}`;
-        try {
-          const errData = JSON.parse(errorText);
-          if (errData.error && errData.error.message) {
-            errorMsg = errData.error.message;
-          }
-        } catch (e) {
-          // Ignore JSON parse error
-        }
-        throw new Error(errorMsg);
-      }
-      return true;
-    } catch (err) {
-      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-        throw new Error('网络请求失败，请检查 API 地址是否正确以及是否跨域');
-      }
-      throw err;
-    }
+  resetQuickReasoning() {
+    this.aiQuickReasoning.value = this.getActiveAiProfile()?.reasoningEffort || '';
   }
 
   async saveAiProfile() {
@@ -632,6 +620,22 @@ class PopupController {
       this.deleteAiProfile();
     });
 
+    this.aiApiType.addEventListener('change', () => {
+      this.aiApiPath.value = AIConfig.switchPath(this.aiApiPath.value, this.aiApiType.value);
+      this.saveFormDraft();
+    });
+    this.aiReasoningEffort.addEventListener('change', () => {
+      this.updateTemperatureState();
+      this.saveFormDraft();
+    });
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local' || (!changes.activeAiProfileId && !changes.aiProfiles)) return;
+      if (changes.aiProfiles) this.aiProfiles = (changes.aiProfiles.newValue || []).map(p => this.normalizeAiProfile(p));
+      if (changes.activeAiProfileId) this.activeAiProfileId = changes.activeAiProfileId.newValue;
+      this.renderAiProfileOptions();
+      this.fillAiProfileForm(this.getActiveAiProfile());
+    });
+
     // 表单输入时自动保存草稿
     const formInputs = [
       this.aiProfileName,
@@ -639,7 +643,9 @@ class PopupController {
       this.aiApiKey,
       this.aiModelId,
       this.aiApiPath,
-      this.aiTemperature
+      this.aiTemperature,
+      this.aiApiType,
+      this.aiReasoningEffort
     ];
     
     formInputs.forEach(input => {
@@ -714,41 +720,30 @@ class PopupController {
       return;
     }
     
+    const requestConfig = AIConfig.normalize({ ...profile, reasoningEffort: this.aiQuickReasoning.value });
     const btn = this.btnAiAnswer;
     const icon = btn.querySelector('i');
     const originalIconClass = icon.className;
-    
     btn.disabled = true;
+    this.aiQuickReasoning.disabled = true;
     icon.className = '';
     icon.innerHTML = '<span class="loader"></span>';
 
     try {
-      chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' }, async (result) => {
-        if (chrome.runtime.lastError || !result || !result.success) {
-          this.log('error', '获取题目失败');
-          this.resetAiButton(btn, icon, originalIconClass);
-          return;
-        }
-
-        this.setBadgeText(result.count);
-
-        if (result.content) {
-          await navigator.clipboard.writeText(result.content);
-        }
-
-        const aiResult = await chrome.tabs.sendMessage(this.currentTab.id, {
-          action: 'aiAnswer'
-        });
-
-        if (!aiResult.success) {
-          this.log('error', aiResult.message || 'AI 分析失败');
-        }
-        
-        this.resetAiButton(btn, icon, originalIconClass);
+      const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' });
+      if (!result?.success) throw new Error(result?.message || '获取题目失败');
+      this.setBadgeText(result.count);
+      if (result.content) await navigator.clipboard.writeText(result.content);
+      const aiResult = await chrome.tabs.sendMessage(this.currentTab.id, {
+        action: 'aiAnswer', config: requestConfig
       });
+      if (!aiResult?.success) throw new Error(aiResult?.message || 'AI 分析失败');
     } catch (err) {
       this.log('error', 'AI 答题失败: ' + err.message);
+    } finally {
       this.resetAiButton(btn, icon, originalIconClass);
+      this.aiQuickReasoning.disabled = false;
+      this.resetQuickReasoning();
     }
   }
 

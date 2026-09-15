@@ -47,16 +47,7 @@ const AIApi = {
   },
 
   normalizeConfig(config = {}) {
-    const merged = { ...this.DEFAULT_CONFIG, ...config };
-    merged.baseUrl = (merged.baseUrl || '').trim().replace(/\/+$/, '');
-    merged.path = (merged.path || '/chat/completions').trim();
-    if (!merged.path.startsWith('/')) {
-      merged.path = `/${merged.path}`;
-    }
-    merged.apiKey = (merged.apiKey || '').trim();
-    merged.model = (merged.model || '').trim();
-    merged.temperature = Number.isFinite(Number(merged.temperature)) ? Number(merged.temperature) : this.DEFAULT_CONFIG.temperature;
-    return merged;
+    return AIConfig.normalize({ ...this.DEFAULT_CONFIG, ...config, path: config.path || AIConfig.defaultPath(config.apiType) });
   },
 
   async loadConfig() {
@@ -78,9 +69,9 @@ const AIApi = {
     }
   },
 
-  async getAnswers(questions) {
+  async getAnswers(questions, requestConfig) {
     const prompt = this.buildPrompt(questions);
-    const config = await this.loadConfig();
+    const config = requestConfig ? this.normalizeConfig(requestConfig) : await this.loadConfig();
     this.validateConfig(config);
 
     return new Promise((resolve, reject) => {
