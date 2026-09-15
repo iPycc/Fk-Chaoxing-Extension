@@ -136,7 +136,8 @@ const AIAnswerCore = {
   parseQuestionContainer(container, docRef, sectionHeader) {
     const fillTargets = this.extractFillTargets(container);
     const shortAnswerTargets = fillTargets.length === 0 ? this.extractShortAnswerTargets(container) : [];
-    const options = this.extractOptions(container);
+    const dropdown = DropdownQuestions.extract(container);
+    const options = dropdown?.options || this.extractOptions(container);
     const type = this.detectQuestionType(container, fillTargets, shortAnswerTargets, options);
     const title = this.extractQuestionTitle(container);
 
@@ -153,12 +154,15 @@ const AIAnswerCore = {
       fillTargets,
       shortAnswerTargets,
       choiceTargets: this.extractChoiceTargets(container),
+      ...(dropdown || {}),
       container,
       docRef
     };
   },
 
   detectQuestionType(container, fillTargets, shortAnswerTargets, options) {
+    const dropdownType = DropdownQuestions.detectType(container);
+    if (dropdownType) return dropdownType;
     const typeText = this.normalizeText(
       container.getAttribute('typename') ||
       container.querySelector('.newZy_TItle, .newZy_Title, .colorShallow')?.textContent ||
@@ -334,11 +338,18 @@ const AIAnswerCore = {
     for (let index = 0; index < questions.length; index += 1) {
       const question = questions[index];
       const answer = answers[index];
-      const applied = await this.applyAnswerToQuestion(question, answer);
-      if (applied) {
-        appliedCount += 1;
-      } else {
+      try {
+        if (answer?.error) throw new Error(answer.error);
+        const applied = await this.applyAnswerToQuestion(question, answer);
+        if (applied) {
+          appliedCount += 1;
+        } else {
+          skippedCount += 1;
+          AINotify.warning(`题目${index + 1}未写入：答案为空或缺少可用控件`);
+        }
+      } catch (err) {
         skippedCount += 1;
+        AINotify.warning(`题目${index + 1}未完成填写：${this.escapeHtml(err.message)}`);
       }
     }
 
@@ -351,6 +362,9 @@ const AIAnswerCore = {
     }
 
     switch (question.type) {
+      case 'sorting':
+      case 'matching':
+        return this.applyDropdownAnswer(question, answer);
       case 'fill_blank':
         return this.applyFillBlankAnswer(question, answer);
       case 'short_answer':
@@ -361,6 +375,71 @@ const AIAnswerCore = {
       default:
         return false;
     }
+  },
+
+  async applyDropdownAnswer(question, answer) {
+    const error = DropdownQuestions.validateAnswer(question, answer);
+    if (error) throw new Error(error);
+    const container = question.container;
+    const qid = container?.getAttribute('data') || container?.id?.match(/(\d+)$/)?.[1];
+    if (!container?.isConnected || !qid) throw new Error('题目控件已失效，请重新提取题目');
+    const hidden = Array.from(container.querySelectorAll('input[type="hidden"]'))
+      .find(input => input.id === `answer${qid}` || input.name === `answer${qid}`);
+    if (!hidden) throw new Error('未找到题目的隐藏答案字段');
+
+    const targets = DropdownQuestions.getTargets(container, question.type);
+    const sorting = question.type === 'sorting';
+    const expectedCount = sorting ? question.sortingLabels.length : question.matchingGroups.left.length;
+    if (targets.length !== expectedCount) throw new Error('答题控件数量与题目不一致');
+    if (!sorting && (new Set(targets.map(target => target.left)).size !== expectedCount ||
+        targets.some(target => !question.matchingGroups.left.some(item => item.id === target.left)))) {
+      throw new Error('连线题显示编号与答题控件无法对应');
+    }
+
+    // Resolve every choice before clicking anything, including shuffled internal IDs.
+    const choices = targets.map((target, index) => {
+      const label = sorting ? answer.answers[index] : answer.pairs.find(pair => pair.left === target.left)?.right;
+      const prefix = sorting ? 'sortSelect' : 'connlineSelect';
+      if (!target.span?.classList.contains(`${prefix}${qid}`)) throw new Error('无法识别下拉框答案控件');
+      const candidates = Array.from(target.box.querySelectorAll('ul.options > li'))
+        .filter(item => DropdownQuestions.text(item.querySelector('a')?.textContent) === label &&
+          item.getAttribute('qid') === qid && item.getAttribute('qtype') === (sorting ? '13' : '11'));
+      if (candidates.length !== 1) throw new Error(`找不到唯一的下拉选项 ${label}`);
+      const item = candidates[0];
+      const value = item.getAttribute('data');
+      if (!value) throw new Error('下拉选项缺少内部值');
+      const name = target.span.getAttribute('data');
+      if (!sorting && !/^\d+$/.test(name || '')) throw new Error('连线控件缺少有效内部编号');
+      return { ...target, item, label, value, name };
+    });
+    if (!sorting && new Set(choices.map(choice => choice.name)).size !== expectedCount) {
+      throw new Error('连线控件内部编号重复');
+    }
+
+    for (const choice of choices) {
+      if (!choice.item.isConnected) throw new Error('填写时控件已失效，请重新提取题目');
+      choice.item.click();
+    }
+    if (choices.some(choice => choice.span.getAttribute('value') !== choice.value ||
+        DropdownQuestions.text(choice.span.textContent) !== choice.label)) {
+      throw new Error('下拉框显示或选中值未更新，请检查页面');
+    }
+    if (sorting) {
+      if (hidden.value !== choices.map(choice => choice.value).join('')) {
+        throw new Error('排序答案字段未同步，请检查页面');
+      }
+    } else {
+      let saved;
+      try { saved = JSON.parse(hidden.value); } catch (_) { throw new Error('连线答案字段未同步，请检查页面'); }
+      const expected = choices.map(choice => ({ name: choice.name, content: choice.value }));
+      const canonical = entries => JSON.stringify(entries.map(entry => ({ name: entry.name, content: entry.content }))
+        .sort((a, b) => Number(a.name) - Number(b.name)));
+      if (!Array.isArray(saved) || saved.length !== expected.length || saved.some(entry => !entry || typeof entry.name !== 'string' || typeof entry.content !== 'string') ||
+          canonical(saved) !== canonical(expected)) {
+        throw new Error('连线配对与答案字段不一致，请检查页面');
+      }
+    }
+    return true;
   },
 
   async applyFillBlankAnswer(question, answer) {
@@ -618,6 +697,10 @@ const AIAnswerCore = {
     if (!answer) {
       return '未获取到答案';
     }
+
+    if (answer.error) return `答案无效：${answer.error}`;
+    if (answer.type === 'sorting') return answer.answers.join(' → ');
+    if (answer.type === 'matching') return answer.pairs.map(pair => `${pair.left} → ${pair.right}`).join('；');
 
     if (Array.isArray(answer.answers)) {
       return answer.answers.join(' | ') || '未获取到答案';
