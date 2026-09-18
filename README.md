@@ -100,7 +100,7 @@ Fk-Chaoxing-Extension/
 | **API 类型** | 每个模型配置独立选择协议 | `Chat Completions` / `Responses` |
 | **请求路径** | 随 API 类型切换标准路径，自定义路径保留 | `/chat/completions` / `/responses` |
 | **默认思考等级** | 使用模型默认、不思考、Low、Medium、High、XHigh、Max | `High` |
-| **温度系数** | 0–2，可留空；显式指定思考等级时禁用并省略 | `0.3` |
+| **温度系数** | 0–2，可留空；Chat Completions 默认 `0.3`，Responses 默认留空；显式指定思考等级时禁用并省略 | `0.3` |
 
 “使用模型默认”不发送思考参数；“不思考”发送 `none`。其余等级发送对应的小写值，Max 不会转换成 XHigh。模型或服务商不支持所选等级时会显示错误，请手动调整。旧配置继续使用 Chat Completions 和模型默认思考等级。
 
@@ -176,12 +176,6 @@ Responses 使用非流式请求（`store: false`），提取最终答案文本�
 
 欢迎提交 Issue 和 PR！如果你发现新的超星页面结构不被支持，请提供相关 HTML 片段以便适配。
 
-
-### 开发验证
-
-运行 `node --test tests/*.test.cjs` 执行配置、协议适配和界面消息流程的模拟测试，无需 API Key。
-
-安装 Playwright 后，可运行 `node tests/popup-browser.cjs` 检查真实浏览器中的弹窗交互；设置 `CHROME_PATH` 可指定 Chrome 可执行文件。此检查模拟 Chrome 扩展接口和网络结果，不调用真实模型。
 
 ### 排序题与连线题
 

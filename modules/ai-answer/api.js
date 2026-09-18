@@ -6,8 +6,7 @@ const AIApi = {
     baseUrl: 'https://api.openai.com/v1',
     path: '/chat/completions',
     apiKey: '',
-    model: '',
-    temperature: 0.3
+    model: ''
   },
 
   buildPrompt(questions) {

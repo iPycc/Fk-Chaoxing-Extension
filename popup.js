@@ -92,7 +92,13 @@ class PopupController {
 
   normalizeAiProfile(profile = {}) {
     const defaults = this.getDefaultAiProfile();
-    const normalized = AIConfig.normalize({ ...defaults, ...profile, path: profile.path || AIConfig.defaultPath(profile.apiType) });
+    const normalized = AIConfig.normalize({
+      ...defaults,
+      ...profile,
+      path: profile.path || AIConfig.defaultPath(profile.apiType),
+      temperature: profile.temperature === undefined
+        ? AIConfig.defaultTemperature(profile.apiType) : profile.temperature
+    });
     normalized.id = normalized.id || `model-${Date.now()}`;
     normalized.name = (normalized.name || normalized.model || defaults.name).trim();
     return normalized;
@@ -173,7 +179,8 @@ class PopupController {
     this.aiApiKey.value = draft.apiKey || '';
     this.aiModelId.value = draft.model || '';
     this.aiApiPath.value = draft.path || AIConfig.defaultPath(draft.apiType);
-    this.aiTemperature.value = draft.temperature !== undefined ? (draft.temperature ?? '') : 0.3;
+    this.aiTemperature.value = draft.temperature !== undefined
+      ? (draft.temperature ?? '') : (AIConfig.defaultTemperature(draft.apiType) ?? '');
     this.aiApiType.value = draft.apiType || 'chat_completions';
     this.aiReasoningEffort.value = draft.reasoningEffort || '';
     this.updateTemperatureState();
@@ -374,6 +381,13 @@ class PopupController {
 
   updateTemperatureState() {
     this.aiTemperature.disabled = this.aiReasoningEffort.value !== '';
+  }
+
+  updateApiType() {
+    this.aiApiPath.value = AIConfig.switchPath(this.aiApiPath.value, this.aiApiType.value);
+    if (this.aiApiType.value === 'responses' && this.aiTemperature.value === '0.3') {
+      this.aiTemperature.value = '';
+    }
   }
 
   resetQuickReasoning() {
@@ -621,7 +635,7 @@ class PopupController {
     });
 
     this.aiApiType.addEventListener('change', () => {
-      this.aiApiPath.value = AIConfig.switchPath(this.aiApiPath.value, this.aiApiType.value);
+      this.updateApiType();
       this.saveFormDraft();
     });
     this.aiReasoningEffort.addEventListener('change', () => {
