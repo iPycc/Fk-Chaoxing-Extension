@@ -59,6 +59,17 @@
           <i class="ri-settings-3-line"></i> 配置
         </button>
       </div>
+      <div class="form-group quick-reasoning">
+        <label for="ai-quick-reasoning">本次思考等级</label>
+        <select id="ai-quick-reasoning" class="form-control"><option value="">使用模型默认</option>
+              <option value="none">不思考</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="xhigh">XHigh</option>
+              <option value="max">Max</option></select>
+        <p class="quick-reasoning-help">仅覆盖本次请求，结束后恢复配置默认等级。</p>
+      </div>
       <div class="button-stack">
         <button class="btn btn-primary" id="btn-ai-answer">
           <img id="btn-ai-icon" src="" style="width: 14px; height: 14px; border-radius: 2px; display: none;" />
@@ -136,6 +147,24 @@
           <input id="ai-model-id" class="form-control" type="text" placeholder="model-id">
         </div>
 
+        <div class="form-group">
+          <label for="ai-api-type">API 类型</label>
+          <select id="ai-api-type" class="form-control">
+            <option value="chat_completions">Chat Completions</option>
+            <option value="responses">Responses</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="ai-reasoning-effort">默认思考等级</label>
+          <select id="ai-reasoning-effort" class="form-control"><option value="">使用模型默认</option>
+              <option value="none">不思考</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="xhigh">XHigh</option>
+              <option value="max">Max</option></select>
+          <p class="form-help">可用等级由模型决定，不支持时会显示服务端错误。</p>
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <label for="ai-api-path">接口路径</label>
@@ -143,10 +172,11 @@
           </div>
           <div class="form-group">
             <label for="ai-temperature">温度</label>
-            <input id="ai-temperature" class="form-control" type="number" min="0" max="2" step="0.1" placeholder="0.3">
+            <input id="ai-temperature" class="form-control" type="number" min="0" max="2" step="0.1" placeholder="留空使用服务默认">
           </div>
         </div>
 
+        <p id="ai-temperature-help" class="form-help">温度可留空；指定思考等级时不发送温度参数。</p>
         <p class="form-help">配置保存在本地。不要把真实 API Key 截图公开。</p>
       </div>
       <div class="modal-footer">
@@ -156,6 +186,7 @@
     </div>
   </div>
 
+  <script src="modules/ai-answer/config.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

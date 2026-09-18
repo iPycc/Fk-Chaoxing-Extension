@@ -1,3 +1,5 @@
+importScripts('modules/ai-answer/config.js');
+
 // Background Service Worker - 处理 API 请求和后台任务
 
 const BACKGROUND_PREFIX = '[Fk-Chaoxing] [Background]';
@@ -46,19 +48,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 function normalizeApiConfig(config = {}) {
-  const normalized = {
-    baseUrl: (config.baseUrl || '').trim().replace(/\/+$/, ''),
-    path: (config.path || '/chat/completions').trim(),
-    apiKey: (config.apiKey || '').trim(),
-    model: (config.model || '').trim(),
-    temperature: Number.isFinite(Number(config.temperature)) ? Number(config.temperature) : 0.3
-  };
-
-  if (!normalized.path.startsWith('/')) {
-    normalized.path = `/${normalized.path}`;
-  }
-
-  return normalized;
+  return AIConfig.normalize(config);
 }
 
 function buildApiUrl(config) {
@@ -89,11 +79,7 @@ async function callOpenAICompatibleAPI(data) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: data.messages,
-      temperature: config.temperature
-    })
+    body: JSON.stringify(buildRequestBody(config, data.messages))
   });
 
   if (!response.ok) {
@@ -102,10 +88,53 @@ async function callOpenAICompatibleAPI(data) {
   }
 
   const result = await response.json();
-  const content = result?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string') {
-    throw new Error('API 返回格式不符合 OpenAI Chat Completions 规范');
-  }
+  return extractResponseText(result, config.apiType);
+}
 
+function buildRequestBody(config, messages) {
+  const body = { model: config.model, stream: false };
+  if (config.apiType === 'responses') {
+    body.input = messages;
+    body.store = false;
+    if (config.reasoningEffort) body.reasoning = { effort: config.reasoningEffort };
+  } else {
+    body.messages = messages;
+    if (config.reasoningEffort) body.reasoning_effort = config.reasoningEffort;
+  }
+  if (!config.reasoningEffort && config.temperature !== null) {
+    body.temperature = config.temperature;
+  }
+  return body;
+}
+
+function extractResponseText(result, apiType) {
+  if (result?.error) {
+    throw new Error(result.error.message || 'AI API 返回错误');
+  }
+  if (apiType === 'responses') {
+    if (result?.status !== 'completed') {
+      throw new Error(`Responses 请求未完成：${result?.status || '未知状态'}（${result?.incomplete_details?.reason || '未返回完整答案'}）`);
+    }
+    const parts = [];
+    for (const item of result.output || []) {
+      if (item.type !== 'message') continue;
+      for (const content of item.content || []) {
+        if (content.type === 'refusal') throw new Error(`AI 拒绝回答：${content.refusal || '未提供原因'}`);
+        if (content.type === 'output_text' && typeof content.text === 'string') parts.push(content.text);
+      }
+    }
+    const text = parts.join('');
+    if (!text.trim()) throw new Error('Responses API 未返回答案文本');
+    return text;
+  }
+  const choice = result?.choices?.[0];
+  if (choice?.message?.refusal) throw new Error(`AI 拒绝回答：${choice.message.refusal}`);
+  if (choice?.finish_reason && choice.finish_reason !== 'stop') {
+    throw new Error(`Chat Completions 请求未完成：${choice.finish_reason}`);
+  }
+  const content = choice?.message?.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new Error('API 返回格式不符合 OpenAI Chat Completions 规范，或未返回答案文本');
+  }
   return content;
 }

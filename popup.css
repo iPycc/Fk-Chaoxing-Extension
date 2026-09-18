@@ -37,7 +37,7 @@
 
 html, body {
   width: 380px;
-  height: 560px;
+  height: 600px;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -197,7 +197,7 @@ input:checked + .slider:before {
 
 /* Sections */
 .section {
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
 }
 
 .section-header-row {
@@ -313,7 +313,7 @@ input:checked + .slider:before {
   background: var(--bg-mute);
   padding: var(--space-3);
   border-radius: var(--radius-md);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-2);
   border: 1px solid var(--border);
 }
 
@@ -341,7 +341,7 @@ input:checked + .slider:before {
 
 /* Footer */
 .footer {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   display: flex;
   justify-content: space-between;
   border-top: 1px solid var(--border);
@@ -551,4 +551,23 @@ input:checked + .slider:before {
   border-radius: var(--radius-md);
   background: var(--bg-mute);
   border: 1px dashed var(--border);
+}
+
+.quick-reasoning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.quick-reasoning-help {
+  grid-column: 1 / -1;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.form-control:disabled {
+  background: var(--bg-mute);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
 }
