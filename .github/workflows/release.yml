@@ -1,0 +1,94 @@
+name: Publish release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - manifest.json
+      - releases/**
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate version and release notes
+        id: version
+        shell: bash
+        run: |
+          version="$(node -p "require('./manifest.json').version")"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid manifest version: $version" >&2
+            exit 1
+          fi
+          if [[ ! -s "releases/$version.md" ]]; then
+            echo "Missing release notes: releases/$version.md" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          if draft="$(gh release view "$VERSION" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [[ "$draft" == "true" ]]; then
+              echo "Release $VERSION exists as a draft; inspect it before retrying." >&2
+              exit 1
+            fi
+            echo "Release $VERSION is already published; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
+              echo "Tag $VERSION exists without a release; inspect it before retrying." >&2
+              exit 1
+            fi
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check JavaScript syntax
+        if: steps.existing.outputs.skip != 'true'
+        shell: bash
+        run: git ls-files -z '*.js' | xargs -0 -r -n 1 node --check
+
+      - name: Package extension
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          mkdir -p dist
+          git archive --format=zip --output="dist/Fk-Chaoxing-Extension-v$VERSION.zip" HEAD \
+            manifest.json background.js content-message-handler.js content.js injected.js \
+            popup.css popup.html popup.js assets icons modules
+          python3 -m zipfile -t "dist/Fk-Chaoxing-Extension-v$VERSION.zip"
+
+      - name: Publish tag and release
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "$VERSION" "dist/Fk-Chaoxing-Extension-v$VERSION.zip" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --notes-file "releases/$VERSION.md" \
+            --latest
