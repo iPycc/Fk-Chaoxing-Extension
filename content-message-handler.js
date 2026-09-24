@@ -102,7 +102,7 @@ const ContentMessageHandler = {
   },
 
   // 处理 AI 答题请求
-  async handleAIAnswer(sendResponse, config) {
+  handleAIAnswer(sendResponse, config) {
     try {
       if (window.self !== window.top) return;
 
@@ -112,20 +112,11 @@ const ContentMessageHandler = {
       if (typeof AIAnswerCore === 'undefined') {
         throw new Error('AI 模块未加载');
       }
-
-      // 调用 AI 答题核心逻辑
-      await AIAnswerCore.processAllQuestions(config);
-
-      // 获取题目数量
-      const questions = await AIAnswerCore.collectQuestions();
-      
-      // GlobalLogger.success('AI 分析完成');
-
-      sendResponse({
-        success: true,
-        answerCount: questions.length,
-        message: 'AI 分析完成'
+      if (AIAnswerCore.isProcessing) throw new Error('答题任务正在进行中');
+      AIAnswerCore.processAllQuestions(config).catch(() => {
+        // Core reports the terminal error to the page panel and global log.
       });
+      sendResponse({ success: true, message: '答题任务已启动' });
     } catch (err) {
       GlobalLogger.error('AI 分析失败', err.message);
       sendResponse({

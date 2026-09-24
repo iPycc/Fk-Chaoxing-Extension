@@ -24,7 +24,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       })
       .catch(error => {
         log.error(`AI API request failed: ${error.message}`);
-        sendResponse({ success: false, error: error.message });
+        sendResponse({ success: false, error: error.message, retryable: error.retryable === true });
       });
     return true; // 保持消息通道开放
   } else if (request.action === 'updateBadge') {
@@ -73,22 +73,53 @@ async function callOpenAICompatibleAPI(data) {
     throw new Error('请先配置模型 ID');
   }
 
-  const response = await fetch(buildApiUrl(config), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`
-    },
-    body: JSON.stringify(buildRequestBody(config, data.messages))
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180000);
+  let response;
+  try {
+    response = await fetch(buildApiUrl(config), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`
+      },
+      body: JSON.stringify(buildRequestBody(config, data.messages)),
+      signal: controller.signal
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`API Request Failed: ${response.status} - ${error}`);
+    if (!response.ok) {
+      const error = new Error(`API Request Failed: ${response.status} - ${await response.text()}`);
+      error.retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      throw error;
+    }
+
+    let result;
+    try {
+      result = await response.json();
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      const error = new Error('API 返回内容不是合法 JSON');
+      error.retryable = true;
+      throw error;
+    }
+    return extractResponseText(result, config.apiType);
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const error = new Error('AI API 请求超时（180 秒）');
+      error.retryable = true;
+      throw error;
+    }
+    if (err instanceof TypeError) err.retryable = true;
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
+}
 
-  const result = await response.json();
-  return extractResponseText(result, config.apiType);
+function retryableError(message) {
+  const error = new Error(message);
+  error.retryable = true;
+  return error;
 }
 
 function buildRequestBody(config, messages) {
@@ -113,7 +144,8 @@ function extractResponseText(result, apiType) {
   }
   if (apiType === 'responses') {
     if (result?.status !== 'completed') {
-      throw new Error(`Responses 请求未完成：${result?.status || '未知状态'}（${result?.incomplete_details?.reason || '未返回完整答案'}）`);
+      const message = `Responses 请求未完成：${result?.status || '未知状态'}（${result?.incomplete_details?.reason || '未返回完整答案'}）`;
+      throw result?.status === 'failed' ? new Error(message) : retryableError(message);
     }
     const parts = [];
     for (const item of result.output || []) {
@@ -124,17 +156,17 @@ function extractResponseText(result, apiType) {
       }
     }
     const text = parts.join('');
-    if (!text.trim()) throw new Error('Responses API 未返回答案文本');
+    if (!text.trim()) throw retryableError('Responses API 未返回答案文本');
     return text;
   }
   const choice = result?.choices?.[0];
   if (choice?.message?.refusal) throw new Error(`AI 拒绝回答：${choice.message.refusal}`);
   if (choice?.finish_reason && choice.finish_reason !== 'stop') {
-    throw new Error(`Chat Completions 请求未完成：${choice.finish_reason}`);
+    throw retryableError(`Chat Completions 请求未完成：${choice.finish_reason}`);
   }
   const content = choice?.message?.content;
   if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('API 返回格式不符合 OpenAI Chat Completions 规范，或未返回答案文本');
+    throw retryableError('API 返回格式不符合 OpenAI Chat Completions 规范，或未返回答案文本');
   }
   return content;
 }

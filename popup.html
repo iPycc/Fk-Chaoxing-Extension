@@ -15,7 +15,7 @@
 </head>
 <body>
   <div class="container">
-    
+    <main id="view-home" class="view home-view">
     <!-- Header -->
     <header class="header">
       <div class="header-left">
@@ -55,7 +55,7 @@
     <section class="section">
       <div class="section-header-row">
         <h2 class="section-title">辅助</h2>
-        <button class="btn-text" id="btn-ai-config-open" type="button" title="AI 模型配置">
+        <button class="btn-text" id="btn-ai-config-open" type="button" title="打开设置">
           <i class="ri-settings-3-line"></i> 配置
         </button>
       </div>
@@ -106,84 +106,114 @@
         ScriptCat
       </a>
     </footer>
+    </main>
 
-  </div>
-
-  <!-- AI Config Modal -->
-  <div id="ai-config-modal" class="modal-overlay" hidden>
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 class="modal-title">AI 模型配置</h2>
-        <button class="btn-icon" id="btn-ai-config-close" type="button">
-          <i class="ri-close-line"></i>
+    <section id="view-settings" class="view settings-view" hidden aria-label="总体设置">
+      <div class="settings-header">
+        <button class="btn-icon settings-back" id="btn-settings-back" type="button" title="返回主界面" aria-label="返回主界面">←</button>
+        <h2>总体设置</h2>
+      </div>
+      <div class="settings-content">
+        <div class="settings-group">
+          <div class="settings-group-heading"><h3>答题任务</h3></div>
+          <div class="setting-field">
+            <label for="ai-batch-size">每片题目数</label>
+            <input id="ai-batch-size" class="form-control" type="number" min="1" max="100" step="1" inputmode="numeric">
+            <p>题目按页面顺序拆分，每片独立请求。</p>
+          </div>
+          <div class="setting-field">
+            <label for="ai-concurrency">最大并发数</label>
+            <input id="ai-concurrency" class="form-control" type="number" min="1" max="8" step="1" inputmode="numeric">
+            <p>设为 1 时逐片排队；更高的值会同时发出请求。</p>
+          </div>
+          <div class="setting-field">
+            <label for="ai-max-retries">失败重试次数</label>
+            <input id="ai-max-retries" class="form-control" type="number" min="0" max="5" step="1" inputmode="numeric">
+            <p>仅重试可恢复的请求错误；0 表示不重试。</p>
+          </div>
+          <p id="batch-settings-error" class="field-error" role="alert" hidden></p>
+          <button id="btn-batch-save" class="btn btn-primary" type="button">保存答题设置</button>
+        </div>
+        <button id="btn-models-open" class="settings-link" type="button">
+          <span class="settings-link-icon">AI</span>
+          <span class="settings-link-text"><strong>模型管理</strong><small id="settings-model-summary">尚未配置模型</small></span>
+          <span class="settings-chevron">›</span>
         </button>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="ai-profile-select">当前模型</label>
-          <div class="inline-row">
-            <select id="ai-profile-select" class="form-control"></select>
-            <button class="btn btn-outline btn-compact" id="btn-ai-profile-new" type="button">添加</button>
-          </div>
-        </div>
+    </section>
 
+    <section id="view-models" class="view settings-view" hidden aria-label="模型管理">
+      <div class="settings-header">
+        <button class="btn-icon settings-back" id="btn-models-back" type="button" title="返回总体设置" aria-label="返回总体设置">←</button>
+        <h2>模型管理</h2>
+        <button class="btn-text" id="btn-ai-profile-new" type="button">＋ 添加</button>
+      </div>
+      <div class="settings-content">
+        <p class="settings-caption">选择一个模型作为当前答题模型，或进入编辑页修改配置。</p>
+        <div id="ai-profile-list" class="profile-list"></div>
+      </div>
+    </section>
+
+    <section id="view-model-editor" class="view settings-view" hidden aria-label="编辑模型">
+      <div class="settings-header">
+        <button class="btn-icon settings-back" id="btn-model-editor-back" type="button" title="返回模型管理" aria-label="返回模型管理">←</button>
+        <h2 id="model-editor-title">添加模型</h2>
+      </div>
+      <div class="settings-content model-fields">
         <div class="form-group">
           <label for="ai-profile-name">显示名称</label>
-          <input id="ai-profile-name" class="form-control" type="text" placeholder="如：OpenAI / Kimi / 本地模型">
+          <input id="ai-profile-name" class="form-control" type="text" placeholder="如：常用模型">
         </div>
-
         <div class="form-group">
           <label for="ai-base-url">API 地址</label>
-          <input id="ai-base-url" class="form-control" type="url" placeholder="">
+          <input id="ai-base-url" class="form-control" type="url" placeholder="https://api.example.com/v1">
         </div>
-
         <div class="form-group">
           <label for="ai-api-key">API 密钥</label>
-          <input id="ai-api-key" class="form-control" type="password" placeholder="sk-...">
+          <div class="inline-row">
+            <input id="ai-api-key" class="form-control" type="password" autocomplete="off" placeholder="API Key">
+            <button id="btn-key-visibility" class="btn-icon field-icon" type="button" title="显示密钥" aria-label="显示密钥">显示</button>
+          </div>
         </div>
-
         <div class="form-group">
           <label for="ai-model-id">模型 ID</label>
           <input id="ai-model-id" class="form-control" type="text" placeholder="model-id">
         </div>
-
         <div class="form-group">
-          <label for="ai-api-type">API 类型</label>
+          <label for="ai-api-type">接口协议</label>
           <select id="ai-api-type" class="form-control">
             <option value="chat_completions">Chat Completions</option>
             <option value="responses">Responses</option>
           </select>
         </div>
         <div class="form-group">
-          <label for="ai-reasoning-effort">默认思考等级</label>
-          <select id="ai-reasoning-effort" class="form-control"><option value="">使用模型默认</option>
-              <option value="none">不思考</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="xhigh">XHigh</option>
-              <option value="max">Max</option></select>
-          <p class="form-help">可用等级由模型决定，不支持时会显示服务端错误。</p>
+          <label for="ai-api-path">接口路径</label>
+          <input id="ai-api-path" class="form-control" type="text" placeholder="/chat/completions">
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label for="ai-api-path">接口路径</label>
-            <input id="ai-api-path" class="form-control" type="text" placeholder="/chat/completions">
+            <label for="ai-reasoning-effort">默认思考等级</label>
+            <select id="ai-reasoning-effort" class="form-control">
+              <option value="">模型默认</option><option value="none">不思考</option>
+              <option value="low">Low</option><option value="medium">Medium</option>
+              <option value="high">High</option><option value="xhigh">XHigh</option><option value="max">Max</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="ai-temperature">温度</label>
-            <input id="ai-temperature" class="form-control" type="number" min="0" max="2" step="0.1" placeholder="留空使用服务默认">
+            <input id="ai-temperature" class="form-control" type="number" min="0" max="2" step="0.1" placeholder="默认">
           </div>
         </div>
-
-        <p id="ai-temperature-help" class="form-help">温度可留空；指定思考等级时不发送温度参数。</p>
-        <p class="form-help">配置保存在本地。不要把真实 API Key 截图公开。</p>
+        <p class="settings-caption">设置思考等级时不发送温度参数。保存不会调用模型；测试连接可能产生费用。</p>
+        <p id="model-editor-error" class="field-error" role="alert" hidden></p>
+        <p id="model-editor-status" class="field-status" role="status" hidden></p>
       </div>
-      <div class="modal-footer">
+      <div class="editor-actions">
         <button class="btn btn-outline btn-danger" id="btn-ai-config-delete" type="button">删除</button>
-        <button class="btn btn-primary" id="btn-ai-config-save" type="button">保存配置</button>
+        <button class="btn btn-outline" id="btn-ai-config-test" type="button">测试连接</button>
+        <button class="btn btn-primary" id="btn-ai-config-save" type="button">保存</button>
       </div>
-    </div>
+    </section>
   </div>
 
   <script src="modules/ai-answer/config.js"></script>

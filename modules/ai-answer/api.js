@@ -96,13 +96,17 @@ const AIApi = {
         }
       }, (response) => {
         if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
+          const error = new Error(chrome.runtime.lastError.message);
+          error.retryable = true;
+          reject(error);
           return;
         }
         if (response && response.success) {
           resolve(response.data);
         } else {
-          reject(new Error(response?.error || 'AI API 请求失败'));
+          const error = new Error(response?.error || 'AI API 请求失败');
+          error.retryable = response?.retryable === true || !response;
+          reject(error);
         }
       });
     });
@@ -185,14 +189,32 @@ const AIApi = {
     try {
       parsed = JSON.parse(raw);
     } catch (err) {
-      throw new Error('AI 返回内容不是合法 JSON');
+      const error = new Error('AI 返回内容不是合法 JSON');
+      error.retryable = true;
+      throw error;
     }
 
     const answerList = Array.isArray(parsed?.answers) ? parsed.answers : [];
+    const indices = answerList.map(item => Number(item?.questionIndex));
+    if (indices.length !== questions.length || new Set(indices).size !== questions.length ||
+        indices.some(index => !Number.isInteger(index) || index < 1 || index > questions.length)) {
+      const error = new Error('AI 返回的题号不完整或重复');
+      error.retryable = true;
+      throw error;
+    }
 
-    return questions.map((question, index) => {
+    const answers = questions.map((question, index) => {
       const entry = answerList.find(item => Number(item?.questionIndex) === index + 1) || {};
       return this.normalizeAnswerEntry(entry, question, index);
     });
+    if (answers.some(answer => answer.error || (Array.isArray(answer.answers) && !answer.answers.length) ||
+        (Array.isArray(answer.answers) && answer.answers.some(value => !value)) ||
+        (Array.isArray(answer.pairs) && !answer.pairs.length) ||
+        (Object.hasOwn(answer, 'answer') && !answer.answer))) {
+      const error = new Error('AI 返回的答案不完整或无效');
+      error.retryable = true;
+      throw error;
+    }
+    return answers;
   }
 };

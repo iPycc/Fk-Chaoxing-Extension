@@ -4,12 +4,11 @@ const AIAnswerCore = {
 
   async processAllQuestions(requestConfig) {
     if (this.isProcessing) {
-      AINotify.warning('正在处理中，请稍候...');
-      return;
+      throw new Error('正在处理中，请稍候...');
     }
 
+    this.isProcessing = true;
     try {
-      this.isProcessing = true;
       AINotify.clear();
       AINotify.show();
       AINotify.info('开始扫描题目与可写入编辑器...');
@@ -24,36 +23,65 @@ const AIAnswerCore = {
 
       const config = requestConfig ? AIApi.normalizeConfig(requestConfig) : await AIApi.loadConfig();
       AIApi.validateConfig(config);
+      const settings = await AIConfig.loadBatchSettings();
+      const autoApplyEnabled = await this.isAutoApplyEnabled();
       await AINotify.init();
       AINotify.updateModelSelect();
 
-      AINotify.info('正在发送到 AI 分析...');
-      const responseText = await AIApi.getAnswers(questions, config);
-      AINotify.success('AI 返回答案成功');
+      const batches = [];
+      for (let offset = 0; offset < questions.length; offset += settings.batchSize) {
+        batches.push(questions.slice(offset, offset + settings.batchSize));
+      }
+      AINotify.info(`开始处理 ${batches.length} 片，每片最多 ${settings.batchSize} 题，同时最多 ${settings.concurrency} 片`);
+      const result = { answeredCount: 0, appliedCount: 0, skippedCount: 0, failures: [] };
+      let nextBatch = 0;
+      let displayQueue = Promise.resolve();
 
-      const answers = AIApi.parseAnswers(responseText, questions);
-      AINotify.info('JSON 答案解析完成');
+      const worker = async () => {
+        while (nextBatch < batches.length) {
+          const batch = batches[nextBatch++];
+          const start = batch[0].index;
+          const end = batch[batch.length - 1].index;
+          try {
+            const answers = await this.answerBatch(batch, config, settings.maxRetries);
+            const display = displayQueue.then(async () => {
+              this.displayAnswers(batch, answers);
+              result.answeredCount += batch.length;
+              if (autoApplyEnabled) {
+                const applied = await this.applyAnswers(batch, answers);
+                result.appliedCount += applied.appliedCount;
+                result.skippedCount += applied.skippedCount;
+              }
+              AINotify.success(`第 ${start}–${end} 题完成（${result.answeredCount}/${questions.length}）`);
+              GlobalLogger.info(`第 ${start}–${end} 题完成（${result.answeredCount}/${questions.length}）`);
+            });
+            displayQueue = display.catch(() => {});
+            await display;
+          } catch (err) {
+            result.failures.push({ start, end, message: err.message });
+            const message = `第 ${start}–${end} 题失败：${err.message}`;
+            AINotify.error(this.escapeHtml(message));
+            GlobalLogger.error(message);
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(settings.concurrency, batches.length) }, () => worker()));
 
-      const autoApplyEnabled = await this.isAutoApplyEnabled();
-      AINotify.info(autoApplyEnabled ? '当前模式：自动作答，开始写入编辑器' : '当前模式：仅展示答案，不写入编辑器');
-
-      const applyResult = autoApplyEnabled
-        ? await this.applyAnswers(questions, answers)
-        : { appliedCount: 0, skippedCount: questions.length };
-
-      this.displayAnswers(questions, answers);
-
-      if (autoApplyEnabled) {
-        AINotify.success(`完成：识别 ${questions.length} 题，写入 ${applyResult.appliedCount} 题`);
+      if (result.failures.length) {
+        const summary = `部分完成：成功 ${result.answeredCount}/${questions.length} 题，失败 ${result.failures.length} 片${autoApplyEnabled ? `，写入 ${result.appliedCount} 题` : ''}`;
+        AINotify.warning(summary);
+        GlobalLogger.warning(summary);
       } else {
-        AINotify.success(`完成：识别 ${questions.length} 题，仅展示答案`);
+        const summary = autoApplyEnabled
+          ? `完成：识别 ${questions.length} 题，写入 ${result.appliedCount} 题`
+          : `完成：识别 ${questions.length} 题，仅展示答案`;
+        AINotify.success(summary);
+        GlobalLogger.success(summary);
       }
-      if (autoApplyEnabled && applyResult.skippedCount > 0) {
-        AINotify.warning(`有 ${applyResult.skippedCount} 题未写入，可能缺少可用控件或答案为空`);
+      if (autoApplyEnabled && result.skippedCount > 0) {
+        AINotify.warning(`有 ${result.skippedCount} 题未写入，可能缺少可用控件`);
       }
-      GlobalLogger.success(autoApplyEnabled
-        ? `AI 答题完成，共写入 ${applyResult.appliedCount} 题`
-        : `AI 答题完成，共返回 ${answers.length} 题答案，未自动写入`);
+      return result;
     } catch (err) {
       console.error('[AI] 处理失败:', err);
       AINotify.error(`处理失败: ${err.message}`);
@@ -61,6 +89,21 @@ const AIAnswerCore = {
       throw err;
     } finally {
       this.isProcessing = false;
+    }
+  },
+
+  async answerBatch(questions, config, maxRetries) {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const text = await AIApi.getAnswers(questions, config);
+        return AIApi.parseAnswers(text, questions);
+      } catch (err) {
+        if (!err.retryable || attempt >= maxRetries) throw err;
+        const start = questions[0].index;
+        const end = questions[questions.length - 1].index;
+        AINotify.warning(`第 ${start}–${end} 题请求失败，准备第 ${attempt + 1} 次重试：${this.escapeHtml(err.message)}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** attempt) + Math.floor(Math.random() * 250)));
+      }
     }
   },
 
@@ -345,11 +388,11 @@ const AIAnswerCore = {
           appliedCount += 1;
         } else {
           skippedCount += 1;
-          AINotify.warning(`题目${index + 1}未写入：答案为空或缺少可用控件`);
+          AINotify.warning(`题目${question.index || index + 1}未写入：答案为空或缺少可用控件`);
         }
       } catch (err) {
         skippedCount += 1;
-        AINotify.warning(`题目${index + 1}未完成填写：${this.escapeHtml(err.message)}`);
+        AINotify.warning(`题目${question.index || index + 1}未完成填写：${this.escapeHtml(err.message)}`);
       }
     }
 
@@ -713,7 +756,7 @@ const AIAnswerCore = {
     questions.forEach((question, index) => {
       const shortTitle = question.title.length > 30 ? `${question.title.slice(0, 30)}...` : question.title;
       const displayAnswer = this.formatAnswerForDisplay(answers[index]);
-      AINotify.info(`<b>题目${index + 1}:</b> ${shortTitle}<br><b>答案:</b> ${displayAnswer}`);
+      AINotify.info(`<b>题目${question.index || index + 1}:</b> ${this.escapeHtml(shortTitle)}<br><b>答案:</b> ${this.escapeHtml(displayAnswer)}`);
     });
   }
 };
