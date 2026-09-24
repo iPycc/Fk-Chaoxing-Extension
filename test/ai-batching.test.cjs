@@ -103,6 +103,17 @@ test('completed slices enter a serialized page-writing queue', async () => {
   assert.equal(maxActiveWrites, 1);
 });
 
+test('skipped answer summary points to the per-question reason', async () => {
+  const { context, run, notices } = harness({ batchSize: 2, concurrency: 1, maxRetries: 0 }, true);
+  context.questions = questions(2);
+  run(`AIApi.getAnswers = async batch => JSON.stringify({ answers: batch.map((_, i) => ({ questionIndex: i + 1, answer: 'A' })) });
+    AIAnswerCore.applyAnswers = async () => ({ appliedCount: 1, skippedCount: 1 });`);
+  const result = await run('AIAnswerCore.processAllQuestions(config)');
+  assert.equal(result.skippedCount, 1);
+  assert.ok(notices.some(([type, text]) => type === 'warning' && String(text).includes('逐题日志中的具体原因')));
+  assert.equal(notices.some(([, text]) => String(text).includes('可能缺少可用控件')), false);
+});
+
 test('retryable errors are retried only for their slice and exhausted slices do not block others', async () => {
   const { context, run, notices } = harness({ batchSize: 2, concurrency: 2, maxRetries: 2 }, true);
   context.questions = questions(6);

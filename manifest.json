@@ -6,8 +6,7 @@
   "permissions": [
     "clipboardWrite",
     "scripting",
-    "storage",
-    "permissions"
+    "storage"
   ],
   "host_permissions": [
     "*://*.chaoxing.com/*"
@@ -34,6 +33,7 @@
         "modules/ui/Toast.js",
         "modules/ui/Modal.js",
         "modules/extractors/DropdownQuestions.js",
+        "modules/extractors/QuestionContainers.js",
         "modules/extractors/HomeworkExtractor.js",
         "modules/extractors/ExamExtractor.js",
         "modules/services/QuestionCollector.js",

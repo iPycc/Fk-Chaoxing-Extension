@@ -79,7 +79,7 @@ const AIAnswerCore = {
         GlobalLogger.success(summary);
       }
       if (autoApplyEnabled && result.skippedCount > 0) {
-        AINotify.warning(`有 ${result.skippedCount} 题未写入，可能缺少可用控件`);
+        AINotify.warning(`有 ${result.skippedCount} 题未写入，请查看逐题日志中的具体原因`);
       }
       return result;
     } catch (err) {
@@ -122,7 +122,7 @@ const AIAnswerCore = {
 
     docs.forEach(docRef => {
       const sectionHeader = QuestionCollector.findHeaderTitle(docRef) || docRef.title || '';
-      const containers = this.getQuestionContainers(docRef);
+      const containers = QuestionContainers.find(docRef);
       containers.forEach(container => {
         const question = this.parseQuestionContainer(container, docRef, sectionHeader);
         if (question) {
@@ -158,22 +158,6 @@ const AIAnswerCore = {
     });
 
     return docs;
-  },
-
-  getQuestionContainers(doc) {
-    const candidates = Array.from(doc.querySelectorAll('.singleQuesId, .TiMu'));
-    return candidates.filter(container => {
-      if (!container || !container.isConnected) {
-        return false;
-      }
-
-      if (container.classList.contains('TiMu') &&
-          (container.parentElement?.closest('.singleQuesId') || container.querySelector('.singleQuesId'))) {
-        return false;
-      }
-
-      return true;
-    });
   },
 
   parseQuestionContainer(container, docRef, sectionHeader) {
