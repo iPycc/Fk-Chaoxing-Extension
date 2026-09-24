@@ -6,7 +6,7 @@ const AIConfig = {
 
   normalizeBatchSettings(settings = {}) {
     const result = {};
-    const labels = { batchSize: '每片题目数', concurrency: '最大并发数', maxRetries: '失败重试次数' };
+    const labels = { batchSize: '每次请求题目数', concurrency: '同时并发数', maxRetries: '失败重试次数' };
     for (const [key, [min, max]] of Object.entries(this.batchLimits)) {
       const value = settings?.[key] === undefined ? this.batchDefaults[key] : Number(settings[key]);
       if (!Number.isInteger(value) || value < min || value > max || settings[key] === '') {

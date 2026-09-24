@@ -56,6 +56,10 @@ test('popup settings navigation, storage, model migration and model save', { ski
 
     await page.click('#btn-ai-config-open');
     assert.equal(await page.locator('#view-settings').isVisible(), true);
+    assert.equal(await page.locator('label[for="ai-batch-size"]').textContent(), '每次请求题目数');
+    assert.equal(await page.locator('label[for="ai-concurrency"]').textContent(), '同时并发数');
+    assert.equal(await page.locator('#ai-concurrency + p').textContent(), '更高的值会同时发出更多请求。');
+    assert.equal(await page.locator('#ai-max-retries + p').textContent(), '0 表示不重试。');
     assert.equal(await page.inputValue('#ai-batch-size'), '50');
     await page.fill('#ai-batch-size', '30');
     await page.fill('#ai-concurrency', '1');

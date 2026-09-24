@@ -117,19 +117,19 @@
         <div class="settings-group">
           <div class="settings-group-heading"><h3>答题任务</h3></div>
           <div class="setting-field">
-            <label for="ai-batch-size">每片题目数</label>
+            <label for="ai-batch-size">每次请求题目数</label>
             <input id="ai-batch-size" class="form-control" type="number" min="1" max="100" step="1" inputmode="numeric">
-            <p>题目按页面顺序拆分，每片独立请求。</p>
+            <p>题目按页面顺序拆分，每次请求独立答题。</p>
           </div>
           <div class="setting-field">
-            <label for="ai-concurrency">最大并发数</label>
+            <label for="ai-concurrency">同时并发数</label>
             <input id="ai-concurrency" class="form-control" type="number" min="1" max="8" step="1" inputmode="numeric">
-            <p>设为 1 时逐片排队；更高的值会同时发出请求。</p>
+            <p>更高的值会同时发出更多请求。</p>
           </div>
           <div class="setting-field">
             <label for="ai-max-retries">失败重试次数</label>
             <input id="ai-max-retries" class="form-control" type="number" min="0" max="5" step="1" inputmode="numeric">
-            <p>仅重试可恢复的请求错误；0 表示不重试。</p>
+            <p>0 表示不重试。</p>
           </div>
           <p id="batch-settings-error" class="field-error" role="alert" hidden></p>
           <button id="btn-batch-save" class="btn btn-primary" type="button">保存答题设置</button>
