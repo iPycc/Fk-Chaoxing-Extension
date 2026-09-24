@@ -30,6 +30,7 @@ test('popup settings navigation, storage, model migration and model save', { ski
           local: {
             async get() { return structuredClone(storageData); },
             async set(values) {
+              if (window.failBatchSave && values.aiBatchSettings) throw new Error('保存失败');
               const changes = {};
               for (const [key, value] of Object.entries(values)) changes[key] = { newValue: structuredClone(value) };
               Object.assign(storageData, structuredClone(values));
@@ -58,21 +59,37 @@ test('popup settings navigation, storage, model migration and model save', { ski
     assert.equal(await page.locator('#view-settings').isVisible(), true);
     assert.equal(await page.locator('label[for="ai-batch-size"]').textContent(), '每次请求题目数');
     assert.equal(await page.locator('label[for="ai-concurrency"]').textContent(), '同时并发数');
+    assert.equal(await page.locator('#ai-concurrency').getAttribute('max'), '16');
     assert.equal(await page.locator('#ai-concurrency + p').textContent(), '更高的值会同时发出更多请求。');
     assert.equal(await page.locator('#ai-max-retries + p').textContent(), '0 表示不重试。');
     assert.equal(await page.inputValue('#ai-batch-size'), '50');
     await page.fill('#ai-batch-size', '30');
-    await page.fill('#ai-concurrency', '1');
+    await page.fill('#ai-concurrency', '16');
     await page.fill('#ai-max-retries', '3');
     await page.click('#btn-batch-save');
     assert.deepEqual(await page.evaluate(() => storageData.aiBatchSettings),
-      { batchSize: 30, concurrency: 1, maxRetries: 3 });
+      { batchSize: 30, concurrency: 16, maxRetries: 3 });
+    assert.equal(await page.locator('#view-home').isVisible(), true);
+    assert.match(await page.locator('#log-content').textContent(), /答题设置已保存/);
+    await page.click('#btn-ai-config-open');
     await page.fill('#ai-batch-size', '0');
     await page.click('#btn-batch-save');
+    assert.equal(await page.locator('#view-settings').isVisible(), true);
     assert.equal(await page.locator('#batch-settings-error').isVisible(), true);
     assert.equal(await page.evaluate(() => storageData.aiBatchSettings.batchSize), 30);
     await page.fill('#ai-batch-size', '30');
     assert.equal(await page.locator('#batch-settings-error').isVisible(), false);
+    await page.fill('#ai-concurrency', '17');
+    await page.click('#btn-batch-save');
+    assert.equal(await page.locator('#view-settings').isVisible(), true);
+    assert.equal(await page.locator('#batch-settings-error').isVisible(), true);
+    assert.equal(await page.evaluate(() => storageData.aiBatchSettings.concurrency), 16);
+    await page.fill('#ai-concurrency', '16');
+    await page.evaluate(() => { window.failBatchSave = true; });
+    await page.click('#btn-batch-save');
+    assert.equal(await page.locator('#view-settings').isVisible(), true);
+    assert.equal(await page.locator('#batch-settings-error').textContent(), '保存失败');
+    await page.evaluate(() => { window.failBatchSave = false; });
     await page.click('#btn-models-open');
     assert.equal(await page.locator('#view-models').isVisible(), true);
     await page.locator('.profile-edit').click();
@@ -141,7 +158,7 @@ test('popup settings navigation, storage, model migration and model save', { ski
     await page.reload();
     await page.waitForFunction(() => document.querySelector('#btn-ai-text').textContent.includes('新名称'));
     await page.click('#btn-ai-config-open');
-    assert.equal(await page.inputValue('#ai-concurrency'), '1');
+    assert.equal(await page.inputValue('#ai-concurrency'), '16');
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

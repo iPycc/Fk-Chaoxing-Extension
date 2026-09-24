@@ -154,12 +154,14 @@ test('authentication errors fail without retry and invalid answers are retriable
 });
 
 test('batch settings validate bounds and fall back on corrupt storage', async () => {
-  const { run, state } = harness({ batchSize: 0, concurrency: 9, maxRetries: -1 });
+  const { run, state } = harness({ batchSize: 0, concurrency: 17, maxRetries: -1 });
   const defaults = await run('AIConfig.loadBatchSettings()');
   assert.deepEqual(JSON.parse(JSON.stringify(defaults)), { batchSize: 50, concurrency: 4, maxRetries: 2 });
   state.aiBatchSettings = { batchSize: 30, concurrency: 1, maxRetries: 0 };
   const stored = await run('AIConfig.loadBatchSettings()');
   assert.deepEqual(JSON.parse(JSON.stringify(stored)), state.aiBatchSettings);
+  assert.equal(run('AIConfig.normalizeBatchSettings({batchSize:30, concurrency:16, maxRetries:0}).concurrency'), 16);
+  assert.throws(() => run('AIConfig.normalizeBatchSettings({batchSize:30, concurrency:17, maxRetries:0})'));
   assert.throws(() => run('AIConfig.normalizeBatchSettings({batchSize:2.5, concurrency:4, maxRetries:2})'));
 });
 

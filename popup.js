@@ -164,6 +164,7 @@ class PopupController {
       });
       await chrome.storage.local.set({ aiBatchSettings: settings });
       this.log('success', '答题设置已保存');
+      this.navigate('home');
     } catch (err) {
       error.textContent = err.message;
       error.hidden = false;

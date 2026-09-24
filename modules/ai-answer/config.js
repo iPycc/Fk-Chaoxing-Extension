@@ -2,7 +2,7 @@
 const AIConfig = {
   efforts: ['', 'none', 'low', 'medium', 'high', 'xhigh', 'max'],
   batchDefaults: { batchSize: 50, concurrency: 4, maxRetries: 2 },
-  batchLimits: { batchSize: [1, 100], concurrency: [1, 8], maxRetries: [0, 5] },
+  batchLimits: { batchSize: [1, 100], concurrency: [1, 16], maxRetries: [0, 5] },
 
   normalizeBatchSettings(settings = {}) {
     const result = {};
