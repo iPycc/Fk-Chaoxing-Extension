@@ -167,12 +167,12 @@ const AIAnswerCore = {
         return false;
       }
 
-      if (container.classList.contains('TiMu') && container.closest('.singleQuesId')) {
+      if (container.classList.contains('TiMu') &&
+          (container.parentElement?.closest('.singleQuesId') || container.querySelector('.singleQuesId'))) {
         return false;
       }
 
-      const parentQuestion = container.parentElement?.closest('.singleQuesId, .TiMu');
-      return parentQuestion !== container;
+      return true;
     });
   },
 
