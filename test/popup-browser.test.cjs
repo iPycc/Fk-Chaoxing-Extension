@@ -108,6 +108,13 @@ test('popup settings navigation, storage, model migration and model save', { ski
     await page.click('#btn-ai-config-save');
     assert.equal(await page.evaluate(() => storageData.aiProfiles.length), 2);
     assert.equal(await page.evaluate(() => requests.filter(request => request.type === 'AI_API_REQUEST').length), 1);
+    const inactiveRow = page.locator('.profile-row').first();
+    const useButton = inactiveRow.locator('.profile-activate');
+    assert.ok((await useButton.boundingBox()).width < 80, 'use button stays compact');
+    assert.equal(await inactiveRow.locator('.profile-meta strong').isVisible(), true);
+    assert.ok(await page.locator('#view-models').evaluate(view => view.scrollWidth <= view.clientWidth),
+      'model list has no horizontal overflow with inactive models');
+    await page.screenshot({ path: '/tmp/fk-chaoxing-model-list.png' });
     await page.locator('.profile-activate').click();
     assert.equal(await page.evaluate(() => storageData.activeAiProfileId), 'old');
     await page.click('#btn-models-back');

@@ -161,7 +161,7 @@ body {
 .profile-meta strong, .profile-meta small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .profile-meta strong { font-size: 13px; }
 .profile-meta small { font-size: 11px; color: var(--text-tertiary); }
-.profile-activate { width: auto; flex: none; padding: 6px 9px; font-size: 12px; }
+.profile-row .profile-activate { width: auto; flex: 0 0 auto; padding: 6px 9px; font-size: 12px; white-space: nowrap; }
 .profile-active { color: #08714f; font-size: 12px; white-space: nowrap; }
 .profile-edit { flex: none; font-size: 21px; }
 .model-fields { display: flex; flex-direction: column; gap: 16px; }
