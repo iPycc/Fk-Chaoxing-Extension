@@ -96,6 +96,11 @@ test('popup settings navigation, storage, model migration and model save', { ski
     assert.equal(await page.evaluate(() => requests.filter(request => request.type === 'AI_API_REQUEST').length), 1);
     await page.selectOption('#ai-api-type', 'responses');
     assert.equal(await page.inputValue('#ai-api-path'), '/responses');
+    await page.fill('#ai-api-path', '/custom');
+    await page.selectOption('#ai-api-type', 'chat_completions');
+    assert.equal(await page.inputValue('#ai-api-path'), '/custom');
+    await page.fill('#ai-api-path', '/chat/completions');
+    await page.selectOption('#ai-api-type', 'responses');
     await page.selectOption('#ai-reasoning-effort', 'high');
     assert.equal(await page.isDisabled('#ai-temperature'), true);
     page.on('dialog', dialog => dialog.dismiss());
@@ -109,8 +114,12 @@ test('popup settings navigation, storage, model migration and model save', { ski
     await page.fill('#ai-base-url', 'https://api.example.org/v1');
     await page.fill('#ai-api-key', 'second-key');
     await page.fill('#ai-model-id', 'second-model');
+    await page.selectOption('#ai-reasoning-effort', 'high');
+    await page.selectOption('#ai-reasoning-effort', '');
+    await page.fill('#ai-temperature', '');
     await page.click('#btn-ai-config-save');
     assert.equal(await page.evaluate(() => storageData.aiProfiles.length), 2);
+    assert.equal(await page.evaluate(() => storageData.aiProfiles[1].temperature), null);
     assert.equal(await page.evaluate(() => requests.filter(request => request.type === 'AI_API_REQUEST').length), 1);
     const inactiveRow = page.locator('.profile-row').first();
     const useButton = inactiveRow.locator('.profile-activate');

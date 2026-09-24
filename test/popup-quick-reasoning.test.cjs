@@ -5,7 +5,7 @@ const { pathToFileURL } = require('node:url');
 let chromium;
 try { ({ chromium } = require('playwright')); } catch (err) { /* Browser dependency is optional. */ }
 
-test('popup quick reasoning retains the launch profile across concurrent changes', { skip: !chromium }, async () => {
+test('popup quick reasoning retains the launch profile and restores drafts', { skip: !chromium }, async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
   try {
     const page = await browser.newPage({ viewport: { width: 380, height: 600 } });
@@ -13,7 +13,8 @@ test('popup quick reasoning retains the launch profile across concurrent changes
     page.on('pageerror', error => errors.push(error.message));
     await page.route(/^https?:/, route => route.abort());
     await page.addInitScript(() => {
-      const profile = { id: 'one', name: 'Test', baseUrl: 'https://example.com/v1', path: '/chat/completions', model: 'test', apiKey: 'fake' };
+      const profile = { id: 'one', name: 'Test', baseUrl: 'https://example.com/v1', path: '/responses',
+        apiType: 'responses', reasoningEffort: 'high', model: 'test', apiKey: 'fake' };
       window.testState = JSON.parse(sessionStorage.getItem('mockStorage') || 'null') || { aiProfiles: [profile], activeAiProfileId: 'one' };
       window.requests = [];
       const listeners = [];
@@ -50,29 +51,7 @@ test('popup quick reasoning retains the launch profile across concurrent changes
     });
     await page.goto(pathToFileURL(path.resolve(__dirname, '../popup.html')).href);
     await page.waitForFunction(() => document.querySelector('#btn-ai-text').textContent.includes('Test'));
-    assert.equal(await page.inputValue('#ai-quick-reasoning'), '');
-    await page.click('#btn-ai-config-open');
-    await page.click('#btn-models-open');
-    await page.locator('.profile-edit').click();
-    await page.selectOption('#ai-api-type', 'responses');
-    assert.equal(await page.inputValue('#ai-api-path'), '/responses');
-    await page.fill('#ai-api-path', '/custom');
-    await page.selectOption('#ai-api-type', 'chat_completions');
-    assert.equal(await page.inputValue('#ai-api-path'), '/custom');
-    await page.fill('#ai-api-path', '/chat/completions');
-    await page.selectOption('#ai-api-type', 'responses');
-    await page.selectOption('#ai-reasoning-effort', 'high');
-    assert.equal(await page.isDisabled('#ai-temperature'), true);
-    await page.click('#btn-ai-config-test');
-    await page.click('#btn-ai-config-save');
-    await page.click('#btn-models-back');
-    await page.click('#btn-settings-back');
     assert.equal(await page.inputValue('#ai-quick-reasoning'), 'high');
-    const testRequest = await page.evaluate(() => requests.find(r => r.type === 'AI_API_REQUEST'));
-    assert.equal(testRequest.data.config.apiType, 'responses');
-    assert.equal(testRequest.data.config.reasoningEffort, 'high');
-    assert.equal(testRequest.data.messages[0].content, '仅回复 OK');
-    assert.equal(await page.evaluate(() => testState.aiConfigDraft), undefined);
     await page.selectOption('#ai-quick-reasoning', 'max');
     await page.evaluate(() => { window.delayAnswer = true; });
     await page.click('#btn-ai-answer');
@@ -96,18 +75,6 @@ test('popup quick reasoning retains the launch profile across concurrent changes
     await page.reload();
     await page.waitForFunction(() => document.querySelector('#btn-ai-text').textContent.includes('Second'));
     assert.equal(await page.inputValue('#ai-quick-reasoning'), 'low');
-    await page.click('#btn-ai-config-open');
-    await page.click('#btn-models-open');
-    await page.locator('.profile-edit').last().click();
-    await page.selectOption('#ai-reasoning-effort', '');
-    assert.equal(await page.isDisabled('#ai-temperature'), false);
-    await page.fill('#ai-temperature', '');
-    await page.click('#btn-ai-config-save');
-    assert.equal(await page.evaluate(() => testState.aiProfiles[1].temperature), null);
-    await page.locator('.profile-edit').last().click();
-    await page.screenshot({ path: process.env.POPUP_SCREENSHOT || '/tmp/fk-chaoxing-popup.png' });
-    const bounds = await page.locator('.editor-actions').boundingBox();
-    assert.ok(bounds.y + bounds.height <= 600, 'save controls fit the popup viewport');
     await page.evaluate(async () => {
       await chrome.storage.local.set({ aiProfiles: [], activeAiProfileId: null, aiConfig: null,
         aiConfigDraft: { name: 'Draft', model: 'draft-model', apiType: 'responses', reasoningEffort: 'xhigh', temperature: null } });
@@ -120,6 +87,5 @@ test('popup quick reasoning retains the launch profile across concurrent changes
     assert.equal(await page.inputValue('#ai-temperature'), '');
     assert.equal(await page.isDisabled('#ai-temperature'), true);
     assert.deepEqual(errors, []);
-    console.log('Chrome popup checks passed: paths, drafts, save/test, temperature, snapshot, failure reset, reload, layout.');
   } finally { await browser.close(); }
 });
