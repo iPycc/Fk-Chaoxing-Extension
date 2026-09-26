@@ -1,24 +1,18 @@
-// Popup 控制面板脚本
-
+// Popup navigation, model management and answer launch.
 class PopupController {
   constructor() {
+    this.views = ['home', 'settings', 'models', 'model-editor'];
     this.logContainer = document.getElementById('log-content');
     this.pageTitleEl = document.getElementById('page-title');
     this.pageUrlEl = document.getElementById('page-url');
     this.pageFaviconEl = document.getElementById('page-favicon');
     this.pluginToggleEl = document.getElementById('plugin-toggle');
-    
     this.btnExtractAuto = document.getElementById('btn-extract-auto');
     this.btnAiAnswer = document.getElementById('btn-ai-answer');
     this.btnAutoApplyToggle = document.getElementById('btn-auto-apply-toggle');
     this.btnAutoApplyText = document.getElementById('btn-auto-apply-text');
     this.btnAiText = document.getElementById('btn-ai-text');
-    this.btnAiIcon = document.getElementById('btn-ai-icon');
-    this.btnAiIconDefault = document.getElementById('btn-ai-icon-default');
-    this.aiConfigModal = document.getElementById('ai-config-modal');
-    this.btnAiConfigOpen = document.getElementById('btn-ai-config-open');
-    this.btnAiConfigClose = document.getElementById('btn-ai-config-close');
-    this.aiProfileSelect = document.getElementById('ai-profile-select');
+    this.aiQuickReasoning = document.getElementById('ai-quick-reasoning');
     this.aiProfileName = document.getElementById('ai-profile-name');
     this.aiBaseUrl = document.getElementById('ai-base-url');
     this.aiApiKey = document.getElementById('ai-api-key');
@@ -27,84 +21,283 @@ class PopupController {
     this.aiTemperature = document.getElementById('ai-temperature');
     this.aiApiType = document.getElementById('ai-api-type');
     this.aiReasoningEffort = document.getElementById('ai-reasoning-effort');
-    this.aiQuickReasoning = document.getElementById('ai-quick-reasoning');
-    this.btnAiProfileNew = document.getElementById('btn-ai-profile-new');
-    this.btnAiConfigSave = document.getElementById('btn-ai-config-save');
-    this.btnAiConfigDelete = document.getElementById('btn-ai-config-delete');
-    
+    this.aiProfiles = [];
+    this.activeAiProfileId = null;
+    this.editorId = null;
+    this.editorSnapshot = '';
+    this.currentView = 'home';
     this.currentTab = null;
     this.isEnabled = true;
     this.autoApplyAnswers = false;
-    this.aiProfiles = [];
-    this.activeAiProfileId = null;
-    
     this.init();
   }
 
   async init() {
-    this.log('info', '控制面板已加载');
-    await this.loadPluginState();
-    await this.loadAutoApplyState();
-    await this.loadAiProfiles();
-    await this.getCurrentTab();
-    await this.detectPageType();
-    await this.loadInitialLogs();
-    await this.updateQuestionCount();
     this.bindEvents();
+    await Promise.all([this.loadPluginState(), this.loadAutoApplyState(), this.loadBatchSettings()]);
+    const draft = await this.loadAiProfiles();
+    await this.getCurrentTab();
+    this.detectPageType();
+    await this.loadInitialLogs();
+    this.updateQuestionCount();
     this.startLogListener();
-    
-    // 检测是否有草稿，有则自动打开配置模态窗
-    await this.checkAndOpenDraftModal();
+    if (!this.aiProfiles.length && draft) this.openEditor(null, draft);
   }
 
-  // 检测是否有未保存的草稿，有则自动打开配置模态窗
-  async checkAndOpenDraftModal() {
-    const data = await chrome.storage.local.get(['aiProfiles', 'aiConfigDraft']);
-    const hasProfiles = Array.isArray(data.aiProfiles) && data.aiProfiles.length > 0;
-    const hasDraft = data.aiConfigDraft && (
-      data.aiConfigDraft.name || 
-      data.aiConfigDraft.baseUrl || 
-      data.aiConfigDraft.apiKey || 
-      data.aiConfigDraft.model
-    );
-    
-    // 如果有草稿且没有有效配置，自动打开配置模态窗
-    if (hasDraft && !hasProfiles) {
-      this.aiConfigModal.hidden = false;
-      this.fillAiProfileFormFromDraft(data.aiConfigDraft);
-      this.log('info', '检测到未保存的配置草稿，已自动打开');
-    }
+  navigate(view, force = false) {
+    if (!force && this.currentView === 'model-editor' && view !== 'model-editor' &&
+        this.editorSnapshot !== JSON.stringify(this.formState()) &&
+        !window.confirm('模型配置尚未保存，确定放弃修改吗？')) return false;
+    this.views.forEach(name => { document.getElementById(`view-${name}`).hidden = name !== view; });
+    this.currentView = view;
+    return true;
   }
 
   getDefaultAiProfile() {
-    return {
-      id: 'default',
-      name: '默认模型',
-      baseUrl: '',
-      path: '/chat/completions',
-      apiKey: '',
-      model: '',
-      temperature: 0.3,
-      apiType: 'chat_completions',
-      reasoningEffort: ''
-    };
+    return { id: '', name: '', baseUrl: '', path: '/chat/completions', apiKey: '', model: '',
+      apiType: 'chat_completions', reasoningEffort: '', temperature: 0.3 };
   }
 
   normalizeAiProfile(profile = {}) {
-    const defaults = this.getDefaultAiProfile();
-    const normalized = AIConfig.normalize({
-      ...defaults,
-      ...profile,
+    const normalized = AIConfig.normalize({ ...this.getDefaultAiProfile(), ...profile,
       path: profile.path || AIConfig.defaultPath(profile.apiType),
-      temperature: profile.temperature === undefined
-        ? AIConfig.defaultTemperature(profile.apiType) : profile.temperature
-    });
-    normalized.id = normalized.id || `model-${Date.now()}`;
-    normalized.name = (normalized.name || normalized.model || defaults.name).trim();
+      temperature: profile.temperature === undefined ? AIConfig.defaultTemperature(profile.apiType) : profile.temperature });
+    normalized.id = profile.id || `model-${Date.now()}`;
+    normalized.name = (profile.name || profile.model || '未命名模型').trim();
     return normalized;
   }
 
-  // 加载插件开关状态
+  async loadAiProfiles() {
+    const data = await chrome.storage.local.get(['aiProfiles', 'activeAiProfileId', 'aiConfig', 'aiConfigDraft']);
+    this.aiProfiles = (Array.isArray(data.aiProfiles) ? data.aiProfiles : []).map(item => this.normalizeAiProfile(item));
+    if (!this.aiProfiles.length && data.aiConfig) {
+      this.aiProfiles = [this.normalizeAiProfile(data.aiConfig)];
+      this.activeAiProfileId = this.aiProfiles[0].id;
+      await this.persistAiProfiles();
+    } else {
+      this.activeAiProfileId = this.aiProfiles.some(item => item.id === data.activeAiProfileId)
+        ? data.activeAiProfileId : this.aiProfiles[0]?.id || null;
+    }
+    this.renderAiProfileList();
+    this.updateAiAnswerButton();
+    this.resetQuickReasoning();
+    return data.aiConfigDraft;
+  }
+
+  getActiveAiProfile() {
+    return this.aiProfiles.find(item => item.id === this.activeAiProfileId) || this.aiProfiles[0] || null;
+  }
+
+  async persistAiProfiles() {
+    await chrome.storage.local.set({ aiProfiles: this.aiProfiles, activeAiProfileId: this.activeAiProfileId,
+      aiConfig: this.getActiveAiProfile() });
+  }
+
+  renderAiProfileList() {
+    const list = document.getElementById('ai-profile-list');
+    list.replaceChildren();
+    document.getElementById('settings-model-summary').textContent = this.aiProfiles.length
+      ? `${this.aiProfiles.length} 个模型 · 当前：${this.getActiveAiProfile()?.name}` : '尚未配置模型';
+    if (!this.aiProfiles.length) {
+      const empty = document.createElement('p');
+      empty.className = 'settings-caption';
+      empty.textContent = '还没有模型。点击右上角“添加”开始配置。';
+      list.appendChild(empty);
+    }
+    this.aiProfiles.forEach(profile => {
+      const row = document.createElement('div');
+      row.className = 'profile-row';
+      const meta = document.createElement('div');
+      meta.className = 'profile-meta';
+      const name = document.createElement('strong');
+      name.textContent = profile.name;
+      const model = document.createElement('small');
+      model.textContent = profile.model;
+      meta.append(name, model);
+      row.appendChild(meta);
+      if (profile.id === this.activeAiProfileId) {
+        const active = document.createElement('span');
+        active.className = 'profile-active';
+        active.textContent = '当前使用';
+        row.appendChild(active);
+      } else {
+        const activate = document.createElement('button');
+        activate.type = 'button';
+        activate.className = 'btn btn-outline profile-activate';
+        activate.textContent = '使用';
+        activate.addEventListener('click', async () => {
+          this.activeAiProfileId = profile.id;
+          await this.persistAiProfiles();
+          this.renderAiProfileList();
+          this.updateAiAnswerButton();
+          this.resetQuickReasoning();
+        });
+        row.appendChild(activate);
+      }
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn-icon profile-edit';
+      edit.title = `编辑 ${profile.name}`;
+      edit.setAttribute('aria-label', edit.title);
+      edit.textContent = '✎';
+      edit.addEventListener('click', () => this.openEditor(profile));
+      row.appendChild(edit);
+      list.appendChild(row);
+    });
+  }
+
+  async loadBatchSettings() {
+    const settings = await AIConfig.loadBatchSettings();
+    document.getElementById('ai-batch-size').value = settings.batchSize;
+    document.getElementById('ai-concurrency').value = settings.concurrency;
+    document.getElementById('ai-max-retries').value = settings.maxRetries;
+  }
+
+  async saveBatchSettings() {
+    const error = document.getElementById('batch-settings-error');
+    error.hidden = true;
+    try {
+      const settings = AIConfig.normalizeBatchSettings({
+        batchSize: document.getElementById('ai-batch-size').value,
+        concurrency: document.getElementById('ai-concurrency').value,
+        maxRetries: document.getElementById('ai-max-retries').value
+      });
+      await chrome.storage.local.set({ aiBatchSettings: settings });
+      this.log('success', '答题设置已保存');
+      this.navigate('home');
+    } catch (err) {
+      error.textContent = err.message;
+      error.hidden = false;
+    }
+  }
+
+  formState() {
+    return { name: this.aiProfileName.value, baseUrl: this.aiBaseUrl.value, apiKey: this.aiApiKey.value,
+      model: this.aiModelId.value, path: this.aiApiPath.value, apiType: this.aiApiType.value,
+      reasoningEffort: this.aiReasoningEffort.value, temperature: this.aiTemperature.value };
+  }
+
+  openEditor(profile = null, draft = null) {
+    this.editorId = profile?.id || null;
+    const data = profile || draft || this.getDefaultAiProfile();
+    this.aiProfileName.value = data.name || '';
+    this.aiBaseUrl.value = data.baseUrl || '';
+    this.aiApiKey.value = data.apiKey || '';
+    this.aiModelId.value = data.model || '';
+    this.aiApiType.value = data.apiType || 'chat_completions';
+    this.aiApiPath.value = data.path || AIConfig.defaultPath(data.apiType);
+    this.aiReasoningEffort.value = data.reasoningEffort || '';
+    this.aiTemperature.value = data.temperature ?? '';
+    this.aiApiKey.type = 'password';
+    document.getElementById('btn-key-visibility').title = '显示密钥';
+    document.getElementById('btn-key-visibility').setAttribute('aria-label', '显示密钥');
+    document.getElementById('btn-key-visibility').textContent = '显示';
+    document.getElementById('model-editor-title').textContent = profile ? '编辑模型' : '添加模型';
+    document.getElementById('btn-ai-config-delete').hidden = !profile;
+    document.getElementById('model-editor-error').hidden = true;
+    document.getElementById('model-editor-status').hidden = true;
+    this.updateTemperatureState();
+    this.editorSnapshot = JSON.stringify(this.formState());
+    this.navigate('model-editor', true);
+  }
+
+  readAiProfileForm() {
+    return AIConfig.normalize({ ...this.formState(), id: this.editorId || `model-${Date.now()}` });
+  }
+
+  validateAiProfile(profile) {
+    if (!profile.name) throw new Error('请填写显示名称');
+    if (!profile.baseUrl) throw new Error('请填写 API 地址');
+    let url;
+    try { url = new URL(profile.baseUrl); } catch (err) { throw new Error('API 地址格式不正确'); }
+    if (!['https:', 'http:'].includes(url.protocol)) throw new Error('API 地址需使用 HTTP 或 HTTPS');
+    if (!profile.apiKey) throw new Error('请填写 API 密钥');
+    if (!profile.model) throw new Error('请填写模型 ID');
+  }
+
+  showEditorMessage(message, type = 'error') {
+    const element = document.getElementById(`model-editor-${type}`);
+    element.textContent = message;
+    element.hidden = !message;
+    document.getElementById(`model-editor-${type === 'error' ? 'status' : 'error'}`).hidden = true;
+  }
+
+  async saveAiProfile() {
+    const button = document.getElementById('btn-ai-config-save');
+    button.disabled = true;
+    try {
+      const profile = this.readAiProfileForm();
+      this.validateAiProfile(profile);
+      const index = this.aiProfiles.findIndex(item => item.id === profile.id);
+      if (index < 0) this.aiProfiles.push(profile);
+      else this.aiProfiles[index] = profile;
+      this.activeAiProfileId = profile.id;
+      await this.persistAiProfiles();
+      await chrome.storage.local.remove('aiConfigDraft');
+      this.editorSnapshot = JSON.stringify(this.formState());
+      this.renderAiProfileList();
+      this.updateAiAnswerButton();
+      this.resetQuickReasoning();
+      this.log('success', `模型 ${profile.name} 已保存`);
+      this.navigate('models', true);
+    } catch (err) {
+      this.showEditorMessage(`保存失败：${err.message}`);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async deleteAiProfile() {
+    if (!this.editorId || !window.confirm('确定删除这个模型配置吗？')) return;
+    this.aiProfiles = this.aiProfiles.filter(item => item.id !== this.editorId);
+    if (this.activeAiProfileId === this.editorId) this.activeAiProfileId = this.aiProfiles[0]?.id || null;
+    await this.persistAiProfiles();
+    this.renderAiProfileList();
+    this.updateAiAnswerButton();
+    this.resetQuickReasoning();
+    this.log('success', '模型配置已删除');
+    this.navigate('models', true);
+  }
+
+  async requestAiHostPermission(baseUrl) {
+    const origin = `${new URL(baseUrl).origin}/*`;
+    if (await chrome.permissions.contains({ origins: [origin] })) return;
+    if (!await chrome.permissions.request({ origins: [origin] })) throw new Error(`未授权访问 ${origin}`);
+  }
+
+  async testAiConnection() {
+    const button = document.getElementById('btn-ai-config-test');
+    button.disabled = true;
+    this.showEditorMessage('正在测试连接（会调用一次模型）', 'status');
+    try {
+      const profile = this.readAiProfileForm();
+      this.validateAiProfile(profile);
+      await this.requestAiHostPermission(profile.baseUrl);
+      const result = await chrome.runtime.sendMessage({ type: 'AI_API_REQUEST',
+        data: { config: profile, messages: [{ role: 'user', content: '仅回复 OK' }] } });
+      if (!result?.success) throw new Error(result?.error || '连接测试失败');
+      this.showEditorMessage('连接测试通过。尚未保存的修改仍需点击“保存”。', 'status');
+    } catch (err) {
+      this.showEditorMessage(`连接测试失败：${err.message}`);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  updateTemperatureState() {
+    this.aiTemperature.disabled = this.aiReasoningEffort.value !== '';
+  }
+
+  resetQuickReasoning() {
+    this.aiQuickReasoning.value = this.getActiveAiProfile()?.reasoningEffort || '';
+  }
+
+  updateAiAnswerButton() {
+    const profile = this.getActiveAiProfile();
+    this.btnAiText.textContent = profile ? `使用 ${profile.name} 答题` : '请先配置 AI 模型';
+    this.btnAiAnswer.disabled = !this.isEnabled;
+  }
+
   async loadPluginState() {
     const data = await chrome.storage.local.get('pluginEnabled');
     this.isEnabled = data.pluginEnabled !== false;
@@ -112,98 +305,17 @@ class PopupController {
     this.updateButtonsState();
   }
 
-  async loadAiProfiles() {
-    const data = await chrome.storage.local.get(['aiProfiles', 'activeAiProfileId', 'aiConfig', 'aiConfigDraft']);
-    const storedProfiles = Array.isArray(data.aiProfiles) ? data.aiProfiles : [];
-    this.aiProfiles = storedProfiles.map(profile => this.normalizeAiProfile(profile));
-
-    // 如果没有配置，不创建默认空配置，而是显示引导
-    if (this.aiProfiles.length === 0) {
-      // 检查是否有旧版配置需要迁移
-      if (data.aiConfig) {
-        const legacyConfig = this.normalizeAiProfile(data.aiConfig);
-        this.aiProfiles = [legacyConfig];
-        await this.persistAiProfiles();
-      }
-    }
-
-    this.activeAiProfileId = data.activeAiProfileId;
-    if (!this.aiProfiles.some(profile => profile.id === this.activeAiProfileId)) {
-      this.activeAiProfileId = this.aiProfiles.length > 0 ? this.aiProfiles[0].id : null;
-    }
-
-    this.renderAiProfileOptions();
-    
-    // 如果有草稿，恢复草稿
-    if (data.aiConfigDraft && !this.activeAiProfileId) {
-      this.fillAiProfileFormFromDraft(data.aiConfigDraft);
-    } else if (this.activeAiProfileId) {
-      this.fillAiProfileForm(this.getActiveAiProfile());
-    } else {
-      // 首次使用，显示引导
-      this.showFirstTimeGuide();
-    }
-    
-    this.updateAiAnswerButton();
+  updateButtonsState() {
+    this.btnExtractAuto.disabled = !this.isEnabled;
+    this.btnAiAnswer.disabled = !this.isEnabled;
+    this.btnAutoApplyToggle.disabled = !this.isEnabled;
   }
 
-  // 首次使用引导
-  showFirstTimeGuide() {
-    this.aiProfileSelect.innerHTML = '<option value="">请先添加模型</option>';
-    this.aiProfileSelect.value = '';
-    this.btnAiConfigDelete.disabled = true;
-    
-    // 清空表单显示引导占位符
-    this.aiProfileName.value = '';
-    this.aiProfileName.placeholder = '如：OpenAI / Kimi / 本地模型';
-    this.aiBaseUrl.value = '';
-    this.aiBaseUrl.placeholder = 'https://api.openai.com/v1';
-    this.aiApiKey.value = '';
-    this.aiApiKey.placeholder = 'sk-...';
-    this.aiModelId.value = '';
-    this.aiModelId.placeholder = 'gpt-3.5-turbo';
-    this.aiApiPath.value = '/chat/completions';
-    this.aiTemperature.value = '0.3';
-    this.aiApiType.value = 'chat_completions';
-    this.aiReasoningEffort.value = '';
-    this.updateTemperatureState();
-    this.resetQuickReasoning();
-    
-    this.log('info', '首次使用，请点击"配置"添加 AI 模型');
-  }
-
-  // 从草稿填充表单
-  fillAiProfileFormFromDraft(draft) {
-    this.aiProfileName.value = draft.name || '';
-    this.aiBaseUrl.value = draft.baseUrl || '';
-    this.aiApiKey.value = draft.apiKey || '';
-    this.aiModelId.value = draft.model || '';
-    this.aiApiPath.value = draft.path || AIConfig.defaultPath(draft.apiType);
-    this.aiTemperature.value = draft.temperature !== undefined
-      ? (draft.temperature ?? '') : (AIConfig.defaultTemperature(draft.apiType) ?? '');
-    this.aiApiType.value = draft.apiType || 'chat_completions';
-    this.aiReasoningEffort.value = draft.reasoningEffort || '';
-    this.updateTemperatureState();
-  }
-
-  // 保存表单草稿
-  async saveFormDraft() {
-    const draft = {
-      name: this.aiProfileName.value,
-      baseUrl: this.aiBaseUrl.value,
-      apiKey: this.aiApiKey.value,
-      model: this.aiModelId.value,
-      path: this.aiApiPath.value,
-      apiType: this.aiApiType.value,
-      reasoningEffort: this.aiReasoningEffort.value,
-      temperature: this.aiTemperature.value
-    };
-    await chrome.storage.local.set({ aiConfigDraft: draft });
-  }
-
-  // 清除草稿
-  async clearFormDraft() {
-    await chrome.storage.local.remove('aiConfigDraft');
+  async togglePluginState() {
+    this.isEnabled = this.pluginToggleEl.checked;
+    await chrome.storage.local.set({ pluginEnabled: this.isEnabled });
+    this.log(this.isEnabled ? 'success' : 'warning', `插件已${this.isEnabled ? '开启' : '关闭'}，刷新页面生效`);
+    this.updateButtonsState();
   }
 
   async loadAutoApplyState() {
@@ -213,642 +325,163 @@ class PopupController {
   }
 
   updateAutoApplyButton() {
-    if (!this.btnAutoApplyToggle || !this.btnAutoApplyText) return;
     this.btnAutoApplyText.textContent = `自动作答：${this.autoApplyAnswers ? '开启' : '关闭'}`;
     this.btnAutoApplyToggle.classList.toggle('active', this.autoApplyAnswers);
-    this.btnAutoApplyToggle.title = this.autoApplyAnswers
-      ? '当前会自动将 AI 答案写入编辑器'
-      : '当前只显示 AI 返回答案，不自动填写';
-  }
-
-  getActiveAiProfile() {
-    if (this.aiProfiles.length === 0) {
-      return null;
-    }
-    return this.aiProfiles.find(profile => profile.id === this.activeAiProfileId) || this.aiProfiles[0];
-  }
-
-  renderAiProfileOptions() {
-    this.aiProfileSelect.innerHTML = '';
-    
-    if (this.aiProfiles.length === 0) {
-      const option = document.createElement('option');
-      option.value = '';
-      option.textContent = '请先添加模型';
-      this.aiProfileSelect.appendChild(option);
-      this.aiProfileSelect.value = '';
-      return;
-    }
-    
-    this.aiProfiles.forEach(profile => {
-      const option = document.createElement('option');
-      option.value = profile.id;
-      option.textContent = profile.name || profile.model || '未命名模型';
-      this.aiProfileSelect.appendChild(option);
-    });
-    this.aiProfileSelect.value = this.activeAiProfileId || '';
-  }
-
-  fillAiProfileForm(profile) {
-    if (!profile) {
-      this.showFirstTimeGuide();
-      return;
-    }
-    
-    const normalized = this.normalizeAiProfile(profile);
-    this.aiProfileName.value = normalized.name || '';
-    this.aiBaseUrl.value = normalized.baseUrl || '';
-    this.aiApiKey.value = normalized.apiKey || '';
-    this.aiModelId.value = normalized.model || '';
-    this.aiApiPath.value = normalized.path || '/chat/completions';
-    this.aiTemperature.value = normalized.temperature ?? '';
-    this.aiApiType.value = normalized.apiType;
-    this.aiReasoningEffort.value = normalized.reasoningEffort;
-    this.updateTemperatureState();
-    this.resetQuickReasoning();
-    this.btnAiConfigDelete.disabled = this.aiProfiles.length <= 1;
-    this.updateAiAnswerButton();
-  }
-
-  updateAiAnswerButton() {
-    const profile = this.getActiveAiProfile();
-    
-    // 如果没有有效配置，显示引导
-    if (!profile || !profile.baseUrl) {
-      this.btnAiText.textContent = '请先配置 AI 模型';
-      this.btnAiIcon.style.display = 'none';
-      this.btnAiIconDefault.style.display = 'inline-block';
-      this.btnAiAnswer.disabled = !this.isEnabled;
-      return;
-    }
-    
-    const modelName = profile.name || profile.model || 'AI';
-    this.btnAiText.textContent = `使用 ${modelName} 答题`;
-    
-    if (profile.baseUrl) {
-      try {
-        const url = new URL(profile.baseUrl);
-        let hostname = url.hostname;
-        const parts = hostname.split('.');
-        if (parts.length > 2) {
-          // 处理类似 .com.cn, .co.uk 的情况
-          if (['com', 'co', 'net', 'org', 'edu', 'gov'].includes(parts[parts.length - 2])) {
-            hostname = parts.slice(-3).join('.');
-          } else {
-            hostname = parts.slice(-2).join('.');
-          }
-        }
-        
-        this.btnAiIcon.src = `https://${hostname}/favicon.ico`;
-        this.btnAiIcon.style.display = 'inline-block';
-        this.btnAiIconDefault.style.display = 'none';
-        
-        // Handle image load error
-        this.btnAiIcon.onerror = () => {
-          this.btnAiIcon.style.display = 'none';
-          this.btnAiIconDefault.style.display = 'inline-block';
-        };
-      } catch (e) {
-        this.btnAiIcon.style.display = 'none';
-        this.btnAiIconDefault.style.display = 'inline-block';
-      }
-    } else {
-      this.btnAiIcon.style.display = 'none';
-      this.btnAiIconDefault.style.display = 'inline-block';
-    }
-  }
-
-  readAiProfileForm(id = this.activeAiProfileId) {
-    // 如果没有选中模型，生成新ID
-    const profileId = id || `model-${Date.now()}`;
-    return this.normalizeAiProfile({
-      id: profileId,
-      name: this.aiProfileName.value,
-      baseUrl: this.aiBaseUrl.value,
-      path: this.aiApiPath.value,
-      apiKey: this.aiApiKey.value,
-      model: this.aiModelId.value,
-      apiType: this.aiApiType.value,
-      reasoningEffort: this.aiReasoningEffort.value,
-      temperature: this.aiTemperature.value
-    });
-  }
-
-  validateAiProfile(profile) {
-    if (!profile.name) {
-      throw new Error('请填写显示名称');
-    }
-    if (!profile.baseUrl) {
-      throw new Error('请填写 API 地址');
-    }
-    new URL(profile.baseUrl);
-    if (!profile.apiKey) {
-      throw new Error('请填写 API 密钥');
-    }
-    if (!profile.model) {
-      throw new Error('请填写模型 ID');
-    }
-  }
-
-  async requestAiHostPermission(baseUrl) {
-    const originPattern = `${new URL(baseUrl).origin}/*`;
-    const hasPermission = await chrome.permissions.contains({ origins: [originPattern] });
-    if (hasPermission) return true;
-
-    const granted = await chrome.permissions.request({ origins: [originPattern] });
-    if (!granted) {
-      throw new Error(`未授权访问 ${originPattern}`);
-    }
-    return true;
-  }
-
-  async persistAiProfiles() {
-    await chrome.storage.local.set({
-      aiProfiles: this.aiProfiles,
-      activeAiProfileId: this.activeAiProfileId,
-      aiConfig: this.getActiveAiProfile()
-    });
-  }
-
-  async testAiConnection(profile) {
-    const response = await chrome.runtime.sendMessage({
-      type: 'AI_API_REQUEST',
-      data: { config: profile, messages: [{ role: 'user', content: '仅回复 OK' }] }
-    });
-    if (!response?.success) throw new Error(response?.error || '连接测试失败');
-    return true;
-  }
-
-  updateTemperatureState() {
-    this.aiTemperature.disabled = this.aiReasoningEffort.value !== '';
-  }
-
-  updateApiType() {
-    this.aiApiPath.value = AIConfig.switchPath(this.aiApiPath.value, this.aiApiType.value);
-    if (this.aiApiType.value === 'responses' && this.aiTemperature.value === '0.3') {
-      this.aiTemperature.value = '';
-    }
-  }
-
-  resetQuickReasoning() {
-    this.aiQuickReasoning.value = this.getActiveAiProfile()?.reasoningEffort || '';
-  }
-
-  async saveAiProfile() {
-    const btn = this.btnAiConfigSave;
-    const originalText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '测试连接中...';
-
-    try {
-      const profile = this.readAiProfileForm();
-      this.validateAiProfile(profile);
-      await this.requestAiHostPermission(profile.baseUrl);
-      
-      // 测试连接
-      await this.testAiConnection(profile);
-
-      const index = this.aiProfiles.findIndex(item => item.id === profile.id);
-      if (index >= 0) {
-        this.aiProfiles[index] = profile;
-      } else {
-        this.aiProfiles.push(profile);
-      }
-      this.activeAiProfileId = profile.id;
-      await this.persistAiProfiles();
-      await this.clearFormDraft(); // 保存成功后清除草稿
-      this.renderAiProfileOptions();
-      this.fillAiProfileForm(profile);
-      this.log('success', `保存成功，连接测试通过：${profile.name}`);
-      this.aiConfigModal.hidden = true;
-    } catch (err) {
-      this.log('error', `保存失败：${err.message}`);
-      alert(`配置保存失败：\n${err.message}`);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = originalText;
-    }
-  }
-
-  async createAiProfile() {
-    // 先保存当前表单为草稿
-    await this.saveFormDraft();
-    
-    const profile = this.normalizeAiProfile({
-      id: `model-${Date.now()}`,
-      name: `新模型 ${this.aiProfiles.length + 1}`,
-      baseUrl: '',
-      path: '/chat/completions',
-      apiKey: '',
-      model: ''
-    });
-    this.aiProfiles.push(profile);
-    this.activeAiProfileId = profile.id;
-    await this.persistAiProfiles();
-    this.renderAiProfileOptions();
-    this.fillAiProfileForm(profile);
-    this.log('info', '已创建新模型配置，请填写后保存');
-  }
-
-  async deleteAiProfile() {
-    if (this.aiProfiles.length === 0) {
-      return;
-    }
-
-    const removed = this.getActiveAiProfile();
-    this.aiProfiles = this.aiProfiles.filter(profile => profile.id !== this.activeAiProfileId);
-    
-    if (this.aiProfiles.length > 0) {
-      this.activeAiProfileId = this.aiProfiles[0].id;
-    } else {
-      this.activeAiProfileId = null;
-    }
-    
-    await this.persistAiProfiles();
-    this.renderAiProfileOptions();
-    
-    if (this.activeAiProfileId) {
-      this.fillAiProfileForm(this.getActiveAiProfile());
-    } else {
-      this.showFirstTimeGuide();
-    }
-    
-    this.updateAiAnswerButton();
-    this.log('success', `已删除 AI 模型配置：${removed ? removed.name : ''}`);
-  }
-
-  // 切换插件开关状态
-  async togglePluginState() {
-    this.isEnabled = this.pluginToggleEl.checked;
-    await chrome.storage.local.set({ pluginEnabled: this.isEnabled });
-    this.log(this.isEnabled ? 'success' : 'warning', `插件已${this.isEnabled ? '开启' : '临时关闭'}，刷新页面生效`);
-    this.updateButtonsState();
-    
-    // 如果想要立即生效并重载当前页面，可以取消下面的注释
-    // if (this.currentTab) {
-    //   chrome.tabs.reload(this.currentTab.id);
-    // }
-  }
-
-  // 更新按钮状态
-  updateButtonsState() {
-    const disabled = !this.isEnabled;
-    this.btnExtractAuto.disabled = disabled;
-    this.btnAiAnswer.disabled = disabled;
-    this.btnAutoApplyToggle.disabled = disabled;
   }
 
   async toggleAutoApplyState() {
     this.autoApplyAnswers = !this.autoApplyAnswers;
     await chrome.storage.local.set({ autoApplyAnswers: this.autoApplyAnswers });
     this.updateAutoApplyButton();
-    this.log('info', this.autoApplyAnswers ? '自动作答已开启，AI 答案会自动写入编辑器' : '自动作答已关闭，AI 仅展示返回答案');
+    this.log('info', `自动作答已${this.autoApplyAnswers ? '开启' : '关闭'}`);
   }
 
-  // 获取当前标签页
   async getCurrentTab() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    this.currentTab = tab;
-    return tab;
+    [this.currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   }
 
-  // 设置插件图标徽章 (气泡)
-  async setBadgeText(text) {
+  detectPageType() {
     if (!this.currentTab) return;
-    try {
-      await chrome.action.setBadgeText({
-        text: text.toString(),
-        tabId: this.currentTab.id
-      });
-      await chrome.action.setBadgeBackgroundColor({
-        color: '#f53f3f', // 红色背景比较醒目
-        tabId: this.currentTab.id
-      });
-    } catch (err) {
-      console.error('设置 Badge 失败', err);
-    }
-  }
-
-  // 检测页面类型
-  async detectPageType() {
-    if (!this.currentTab) return;
-
-    const url = this.currentTab.url;
-    const title = this.currentTab.title || '未知页面';
-    const faviconUrl = this.currentTab.favIconUrl;
-
-    // 显示真实页面信息
+    const { url = '', title = '未知页面', favIconUrl } = this.currentTab;
     this.pageTitleEl.textContent = title;
-    this.pageUrlEl.textContent = new URL(url).hostname || url;
-    
-    if (faviconUrl) {
-      this.pageFaviconEl.src = faviconUrl;
-    } else {
-      this.pageFaviconEl.src = 'icons/chaoxing.png';
-    }
-
-    if (url.includes('/exam-ans/mooc2/exam/preview')) {
-      this.log('info', '检测到考试页面');
-    } else if (url.includes('/mooc-ans/mooc2/work/dowork') || url.includes('/work/dowork')) {
-      this.log('info', '检测到作业作答页面');
-    } else if (url.includes('/mycourse/studentstudy')) {
-      this.log('info', '检测到作业/章节页面');
-    } else if (url.includes('chaoxing.com')) {
-      this.log('info', '检测到超星页面');
-    } else {
-      this.log('warning', '当前不是超星页面');
-    }
+    try { this.pageUrlEl.textContent = new URL(url).hostname; }
+    catch (err) { this.pageUrlEl.textContent = url; }
+    this.pageFaviconEl.src = favIconUrl || 'icons/chaoxing.png';
   }
 
-  // 绑定事件
-  bindEvents() {
-    // 软关闭开关
-    this.pluginToggleEl.addEventListener('change', () => {
-      this.togglePluginState();
-    });
-
-    document.getElementById('btn-refresh').addEventListener('click', () => {
-      chrome.runtime.reload();
-    });
-
-    // 自动获取题目
-    this.btnExtractAuto.addEventListener('click', () => {
-      this.getQuestions();
-    });
-
-    // AI 答题
-    this.btnAiAnswer.addEventListener('click', () => {
-      this.aiAnswer();
-    });
-
-    this.btnAutoApplyToggle.addEventListener('click', () => {
-      this.toggleAutoApplyState();
-    });
-
-    this.btnAiConfigOpen.addEventListener('click', async () => {
-      this.aiConfigModal.hidden = false;
-      
-      // 如果没有有效配置，尝试恢复草稿
-      if (!this.activeAiProfileId || !this.getActiveAiProfile()) {
-        const data = await chrome.storage.local.get('aiConfigDraft');
-        if (data.aiConfigDraft) {
-          this.fillAiProfileFormFromDraft(data.aiConfigDraft);
-          this.log('info', '已恢复上次未保存的配置');
-        }
-      }
-    });
-
-    this.btnAiConfigClose.addEventListener('click', () => {
-      this.aiConfigModal.hidden = true;
-    });
-
-    this.aiProfileSelect.addEventListener('change', async () => {
-      // 切换模型前保存当前表单为草稿
-      await this.saveFormDraft();
-      
-      this.activeAiProfileId = this.aiProfileSelect.value || null;
-      await this.persistAiProfiles();
-      
-      if (this.activeAiProfileId) {
-        this.fillAiProfileForm(this.getActiveAiProfile());
-      } else {
-        // 尝试从草稿恢复
-        const data = await chrome.storage.local.get('aiConfigDraft');
-        if (data.aiConfigDraft) {
-          this.fillAiProfileFormFromDraft(data.aiConfigDraft);
-        } else {
-          this.showFirstTimeGuide();
-        }
-      }
-    });
-
-    this.btnAiProfileNew.addEventListener('click', () => {
-      this.createAiProfile();
-    });
-
-    this.btnAiConfigSave.addEventListener('click', () => {
-      this.saveAiProfile();
-    });
-
-    this.btnAiConfigDelete.addEventListener('click', () => {
-      this.deleteAiProfile();
-    });
-
-    this.aiApiType.addEventListener('change', () => {
-      this.updateApiType();
-      this.saveFormDraft();
-    });
-    this.aiReasoningEffort.addEventListener('change', () => {
-      this.updateTemperatureState();
-      this.saveFormDraft();
-    });
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== 'local' || (!changes.activeAiProfileId && !changes.aiProfiles)) return;
-      if (changes.aiProfiles) this.aiProfiles = (changes.aiProfiles.newValue || []).map(p => this.normalizeAiProfile(p));
-      if (changes.activeAiProfileId) this.activeAiProfileId = changes.activeAiProfileId.newValue;
-      this.renderAiProfileOptions();
-      this.fillAiProfileForm(this.getActiveAiProfile());
-    });
-
-    // 表单输入时自动保存草稿
-    const formInputs = [
-      this.aiProfileName,
-      this.aiBaseUrl,
-      this.aiApiKey,
-      this.aiModelId,
-      this.aiApiPath,
-      this.aiTemperature,
-      this.aiApiType,
-      this.aiReasoningEffort
-    ];
-    
-    formInputs.forEach(input => {
-      if (input) {
-        input.addEventListener('input', () => {
-          this.saveFormDraft();
-        });
-      }
-    });
-
-    // 清空日志
-    document.getElementById('btn-clear-log').addEventListener('click', () => {
-      this.clearLog();
-    });
-  }
-
-  // 自动获取题目
   async getQuestions() {
-    if (!this.isEnabled) return;
-    
-    const icon = this.btnExtractAuto.querySelector('i');
-    const originalIconClass = icon.className;
-    
+    if (!this.isEnabled || !this.currentTab) return;
     this.btnExtractAuto.disabled = true;
-    icon.className = '';
-    icon.innerHTML = '<span class="loader"></span>';
-    
-    try {
-      chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' }, async (result) => {
-        if (chrome.runtime.lastError) {
-          this.log('error', '获取题目失败 (请刷新页面后重试)');
-          this.resetExtractButton(icon, originalIconClass);
-          return;
-        }
-
-        if (result && result.success) {
-          this.setBadgeText(result.count);
-          this.log('success', `共获取 ${result.count} 道题目`);
-          
-          await chrome.tabs.sendMessage(this.currentTab.id, {
-            action: 'showQuestionModal',
-            content: result.content
-          });
-        } else if (result) {
-          this.log('error', result.message || '获取题目失败');
-        }
-        
-        this.resetExtractButton(icon, originalIconClass);
-      });
-    } catch (err) {
-      this.log('error', '获取题目失败 (请刷新页面后重试)');
-      this.resetExtractButton(icon, originalIconClass);
-    }
-  }
-
-  // 重置提取按钮状态
-  resetExtractButton(icon, originalIconClass) {
-    if (this.isEnabled) this.btnExtractAuto.disabled = false;
-    icon.className = originalIconClass;
-    icon.innerHTML = '';
-  }
-
-  // AI 答题
-  async aiAnswer() {
-    if (!this.isEnabled) return;
-    
-    // 检查是否有有效配置
-    const profile = this.getActiveAiProfile();
-    if (!profile || !profile.baseUrl) {
-      this.log('warning', '请先配置 AI 模型');
-      this.aiConfigModal.hidden = false;
-      return;
-    }
-    
-    const requestConfig = AIConfig.normalize({ ...profile, reasoningEffort: this.aiQuickReasoning.value });
-    const btn = this.btnAiAnswer;
-    const icon = btn.querySelector('i');
-    const originalIconClass = icon.className;
-    btn.disabled = true;
-    this.aiQuickReasoning.disabled = true;
-    icon.className = '';
-    icon.innerHTML = '<span class="loader"></span>';
-
     try {
       const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' });
       if (!result?.success) throw new Error(result?.message || '获取题目失败');
-      this.setBadgeText(result.count);
-      if (result.content) await navigator.clipboard.writeText(result.content);
-      const aiResult = await chrome.tabs.sendMessage(this.currentTab.id, {
-        action: 'aiAnswer', config: requestConfig
-      });
-      if (!aiResult?.success) throw new Error(aiResult?.message || 'AI 分析失败');
+      await chrome.action.setBadgeText({ text: String(result.count), tabId: this.currentTab.id });
+      this.log('success', `共获取 ${result.count} 道题目`);
+      await chrome.tabs.sendMessage(this.currentTab.id, { action: 'showQuestionModal', content: result.content });
     } catch (err) {
-      this.log('error', 'AI 答题失败: ' + err.message);
+      this.log('error', `获取题目失败：${err.message}`);
     } finally {
-      this.resetAiButton(btn, icon, originalIconClass);
+      this.btnExtractAuto.disabled = !this.isEnabled;
+    }
+  }
+
+  async aiAnswer() {
+    if (!this.isEnabled || !this.currentTab) return;
+    const profile = this.getActiveAiProfile();
+    if (!profile) {
+      this.log('warning', '请先配置 AI 模型');
+      this.navigate('settings');
+      return;
+    }
+    this.btnAiAnswer.disabled = true;
+    this.aiQuickReasoning.disabled = true;
+    try {
+      const config = AIConfig.normalize({ ...profile,
+        reasoningEffort: this.aiQuickReasoning.value || profile.reasoningEffort });
+      this.validateAiProfile(config);
+      await this.requestAiHostPermission(config.baseUrl);
+      const response = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'aiAnswer', config });
+      if (!response?.success) throw new Error(response?.message || '启动答题任务失败');
+      this.log('info', '答题任务已启动，进度请查看页面悬浮面板');
+    } catch (err) {
+      this.log('error', `AI 答题失败：${err.message}`);
+    } finally {
+      this.btnAiAnswer.disabled = !this.isEnabled;
       this.aiQuickReasoning.disabled = false;
       this.resetQuickReasoning();
     }
   }
 
-  // 重置 AI 按钮状态
-  resetAiButton(btn, icon, originalIconClass) {
-    if (this.isEnabled) btn.disabled = false;
-    icon.className = originalIconClass;
-    icon.innerHTML = '';
-  }
-
-  // 清空日志
-  clearLog() {
-    this.logContainer.innerHTML = '<div class="log-item info"><span class="log-time">--:--:--</span><span class="log-msg">日志已清空</span></div>';
-  }
-
-  // 添加日志
-  log(type, message) {
-    const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-    const logItem = document.createElement('div');
-    logItem.className = `log-item ${type}`;
-    logItem.innerHTML = `
-      <span class="log-time">${time}</span>
-      <span class="log-msg">${message}</span>
-    `;
-    
-    if (this.logContainer.children.length === 1 && 
-        this.logContainer.children[0].textContent.includes('等待操作')) {
-      this.logContainer.innerHTML = '';
-    }
-    
-    this.logContainer.appendChild(logItem);
-    this.logContainer.scrollTop = this.logContainer.scrollHeight;
-
-    while (this.logContainer.children.length > 50) {
-      this.logContainer.removeChild(this.logContainer.firstChild);
-    }
-  }
-
-  // 加载初始日志
-  async loadInitialLogs() {
-    try {
-      const result = await chrome.tabs.sendMessage(this.currentTab.id, {
-        action: 'getLogs'
-      });
-
-      if (result.success && result.logs && result.logs.length > 0) {
-        this.logContainer.innerHTML = '';
-        result.logs.forEach(log => {
-          const logItem = document.createElement('div');
-          logItem.className = `log-item ${log.type}`;
-          logItem.innerHTML = `
-            <span class="log-time">${log.time}</span>
-            <span class="log-msg">${log.message}</span>
-          `;
-          this.logContainer.appendChild(logItem);
-        });
-        this.logContainer.scrollTop = this.logContainer.scrollHeight;
-      }
-    } catch (err) {
-      // 页面可能未加载完成
-    }
-  }
-
-  // 更新题目数量
   async updateQuestionCount() {
+    if (!this.currentTab) return;
     try {
-      // 尝试向所有 frame 发送消息获取最新状态，直到拿到一个有效数字
-      chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestionCount' }, (result) => {
-        if (chrome.runtime.lastError) {
-          return;
-        }
-        if (result && result.success && result.count !== undefined && result.count > 0) {
-          this.setBadgeText(result.count);
-        }
-      });
-    } catch (err) {
-      // 忽略错误
-    }
+      const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestionCount' });
+      if (result?.success && result.count > 0) {
+        await chrome.action.setBadgeText({ text: String(result.count), tabId: this.currentTab.id });
+        await chrome.action.setBadgeBackgroundColor({ color: '#f53f3f', tabId: this.currentTab.id });
+      }
+    } catch (err) { /* Page may not be ready. */ }
   }
 
-  // 开始监听日志
+  log(type, message) {
+    const item = document.createElement('div');
+    item.className = `log-item ${type}`;
+    const time = document.createElement('span');
+    time.className = 'log-time';
+    time.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    const text = document.createElement('span');
+    text.className = 'log-msg';
+    text.textContent = message;
+    if (this.logContainer.firstElementChild?.textContent.includes('等待操作')) this.logContainer.replaceChildren();
+    item.append(time, text);
+    this.logContainer.appendChild(item);
+    while (this.logContainer.children.length > 50) this.logContainer.firstElementChild.remove();
+    this.logContainer.scrollTop = this.logContainer.scrollHeight;
+  }
+
+  async loadInitialLogs() {
+    if (!this.currentTab) return;
+    try {
+      const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getLogs' });
+      if (result?.success) result.logs?.forEach(entry => this.log(entry.type, entry.message));
+    } catch (err) { /* Page may not be ready. */ }
+  }
+
   startLogListener() {
-    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      if (request.action === 'log' && request.log) {
-        this.log(request.log.type, request.log.message);
+    chrome.runtime.onMessage.addListener(request => {
+      if (request.action === 'log' && request.log) this.log(request.log.type, request.log.message);
+    });
+  }
+
+  bindEvents() {
+    const on = (id, event, handler) => document.getElementById(id).addEventListener(event, handler);
+    on('btn-ai-config-open', 'click', () => this.navigate('settings'));
+    on('btn-settings-back', 'click', () => this.navigate('home'));
+    on('btn-models-open', 'click', () => this.navigate('models'));
+    on('btn-models-back', 'click', () => this.navigate('settings'));
+    on('btn-model-editor-back', 'click', () => this.navigate('models'));
+    on('btn-ai-profile-new', 'click', () => this.openEditor());
+    on('btn-batch-save', 'click', () => this.saveBatchSettings());
+    ['ai-batch-size', 'ai-concurrency', 'ai-max-retries'].forEach(id => {
+      on(id, 'input', () => { document.getElementById('batch-settings-error').hidden = true; });
+    });
+    on('btn-ai-config-save', 'click', () => this.saveAiProfile());
+    on('btn-ai-config-delete', 'click', () => this.deleteAiProfile());
+    on('btn-ai-config-test', 'click', () => this.testAiConnection());
+    on('btn-key-visibility', 'click', event => {
+      const visible = this.aiApiKey.type === 'password';
+      this.aiApiKey.type = visible ? 'text' : 'password';
+      event.currentTarget.title = visible ? '隐藏密钥' : '显示密钥';
+      event.currentTarget.setAttribute('aria-label', event.currentTarget.title);
+      event.currentTarget.textContent = visible ? '隐藏' : '显示';
+    });
+    on('ai-api-type', 'change', () => {
+      this.aiApiPath.value = AIConfig.switchPath(this.aiApiPath.value, this.aiApiType.value);
+      if (this.aiApiType.value === 'responses' && this.aiTemperature.value === '0.3') this.aiTemperature.value = '';
+    });
+    on('ai-reasoning-effort', 'change', () => this.updateTemperatureState());
+    on('btn-ai-answer', 'click', () => this.aiAnswer());
+    on('btn-extract-auto', 'click', () => this.getQuestions());
+    on('btn-auto-apply-toggle', 'click', () => this.toggleAutoApplyState());
+    on('plugin-toggle', 'change', () => this.togglePluginState());
+    on('btn-refresh', 'click', () => chrome.runtime.reload());
+    on('btn-clear-log', 'click', () => this.logContainer.replaceChildren());
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      if (changes.aiProfiles) this.aiProfiles = (changes.aiProfiles.newValue || []).map(item => this.normalizeAiProfile(item));
+      if (changes.activeAiProfileId) this.activeAiProfileId = changes.activeAiProfileId.newValue;
+      if (changes.aiProfiles || changes.activeAiProfileId) {
+        this.renderAiProfileList();
+        this.updateAiAnswerButton();
+        if (!this.aiQuickReasoning.disabled) this.resetQuickReasoning();
       }
+      if (changes.autoApplyAnswers) {
+        this.autoApplyAnswers = changes.autoApplyAnswers.newValue === true;
+        this.updateAutoApplyButton();
+      }
+      if (changes.aiBatchSettings && this.currentView === 'settings') this.loadBatchSettings();
     });
   }
 }
 
-// 初始化
-document.addEventListener('DOMContentLoaded', () => {
-  new PopupController();
-});
+document.addEventListener('DOMContentLoaded', () => new PopupController());

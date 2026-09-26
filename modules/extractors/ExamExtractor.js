@@ -36,9 +36,7 @@ const ExamExtractor = {
     const questions = [];
     
     // Find all question containers
-    const containers = doc.querySelectorAll(
-      '.singleQuesId[id^="sigleQuestionDiv_"], .singleQuesId[id^="question"], .singleQuesId[typename]'
-    );
+    const containers = QuestionContainers.find(doc).filter(container => container.classList.contains('singleQuesId'));
     
     containers.forEach(container => {
       const question = this.parseExamQuestion(container);
@@ -51,8 +49,9 @@ const ExamExtractor = {
   // Parse a single exam question
   parseExamQuestion(container) {
     // Extract title
-    const titleEl = container.querySelector('h3.mark_name.colorDeep');
+    const titleEl = container.querySelector('h3.mark_name.colorDeep, h3.mark_name');
     const stem = this.extractTitle(titleEl);
+    if (!stem) return null;
     const typeLabel = this.getTypeLabel(container);
     const title = this.normalizeText(`${typeLabel} ${stem}`);
     

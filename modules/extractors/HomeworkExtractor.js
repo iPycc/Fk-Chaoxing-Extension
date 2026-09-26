@@ -84,9 +84,11 @@ const HomeworkExtractor = {
       return this.normalizeText(node?.textContent || '');
     };
     
-    const containers = Array.from(doc.querySelectorAll('.TiMu'));
-    if (containers.length > 0) {
-      containers.forEach(box => {
+    QuestionContainers.find(doc).forEach(box => {
+      if (box.classList.contains('singleQuesId')) {
+        const question = this.parseModernQuestion(box);
+        if (question) questions.push(question);
+      } else {
         const title = getTitleFrom(box);
         if (!title) return;
         
@@ -100,15 +102,7 @@ const HomeworkExtractor = {
         }).filter(Boolean);
         
         questions.push({ title, options: this.sortOptions(options), type: this.detectType(box, options) });
-      });
-    }
-
-    const modernContainers = Array.from(doc.querySelectorAll(
-      '.questionLi.singleQuesId, .singleQuesId[id^="question"], .singleQuesId[typename]'
-    ));
-    modernContainers.forEach(container => {
-      const question = this.parseModernQuestion(container);
-      if (question) questions.push(question);
+      }
     });
     
     // Fallback if no containers found
@@ -121,9 +115,8 @@ const HomeworkExtractor = {
 
   // Legacy fallback
   extractTitlesFallback(doc) {
-    const primary = ['.Zy_TItle .fontLabel', '.Zy_Title .fontLabel', '.newZy_TItle .fontLabel', '.newZy_Title .fontLabel',
-      '.TiMu .Zy_TItle .fontLabel', '.TiMu .Zy_Title .fontLabel'];
-    const fallback = ['.Zy_TItle', '.Zy_Title', '.newZy_TItle', '.newZy_Title', '.TiMu .Zy_TItle', '.TiMu .Zy_Title'];
+    const primary = ['.Zy_TItle .fontLabel', '.Zy_Title .fontLabel', '.newZy_TItle .fontLabel', '.newZy_Title .fontLabel'];
+    const fallback = ['.Zy_TItle', '.Zy_Title', '.newZy_TItle', '.newZy_Title'];
     const set = new Set();
     
     primary.forEach(sel => doc.querySelectorAll(sel).forEach(n => {

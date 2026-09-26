@@ -1,6 +1,33 @@
 // Shared configuration for the popup, content scripts and background worker.
 const AIConfig = {
   efforts: ['', 'none', 'low', 'medium', 'high', 'xhigh', 'max'],
+  batchDefaults: { batchSize: 50, concurrency: 4, maxRetries: 2 },
+  batchLimits: { batchSize: [1, 100], concurrency: [1, 16], maxRetries: [0, 5] },
+
+  normalizeBatchSettings(settings = {}) {
+    const result = {};
+    const labels = { batchSize: '每次请求题目数', concurrency: '同时并发数', maxRetries: '失败重试次数' };
+    for (const [key, [min, max]] of Object.entries(this.batchLimits)) {
+      const value = settings?.[key] === undefined ? this.batchDefaults[key] : Number(settings[key]);
+      if (!Number.isInteger(value) || value < min || value > max || settings[key] === '') {
+        throw new Error(`${labels[key]}必须为 ${min} 到 ${max} 之间的整数`);
+      }
+      result[key] = value;
+    }
+    return result;
+  },
+
+  async loadBatchSettings() {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+      return { ...this.batchDefaults };
+    }
+    const data = await chrome.storage.local.get('aiBatchSettings');
+    try {
+      return this.normalizeBatchSettings(data.aiBatchSettings);
+    } catch (err) {
+      return { ...this.batchDefaults };
+    }
+  },
 
   defaultPath(apiType) {
     return apiType === 'responses' ? '/responses' : '/chat/completions';

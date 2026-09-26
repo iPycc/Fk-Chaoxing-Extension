@@ -3,4 +3,5 @@
 cx-dom/
 
 .idea/
-tests/
+test/
+AGENTS.md
