@@ -73,7 +73,7 @@ const AIStream = {
       } else {
         const choice = event.choices?.[0];
         if (choice?.delta?.refusal) throw new Error(`AI 拒绝回答：${choice.delta.refusal}`);
-        if (!choice?.delta?.reasoning_content) appendVisibleContent(choice?.delta?.content);
+        appendVisibleContent(choice?.delta?.content);
         if (choice?.finish_reason) finishReason = choice.finish_reason;
       }
     };
