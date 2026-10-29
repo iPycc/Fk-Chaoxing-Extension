@@ -170,6 +170,10 @@ const AIConfig = {
     if (temperature !== null && (!Number.isFinite(temperature) || temperature < 0 || temperature > 2)) {
       throw new Error('温度必须为 0 到 2 之间的数字，或留空');
     }
+    const legacyPrompt = [
+      typeof config.systemPrompt === 'string' && config.systemPrompt !== this.legacySystemPrompt ? config.systemPrompt : '',
+      typeof config.userPrompt === 'string' && config.userPrompt !== this.legacyUserPrompt ? config.userPrompt : ''
+    ].filter(Boolean).join('\n\n');
     const normalized = {
       ...config,
       apiType,
@@ -181,12 +185,10 @@ const AIConfig = {
       path,
       apiKey: (config.apiKey || '').trim(),
       model: (config.model || '').trim(),
-      answerPrompt: typeof config.answerPrompt === 'string' ? config.answerPrompt : [
-        this.defaultAnswerPrompt,
-        typeof config.systemPrompt === 'string' && config.systemPrompt !== this.legacySystemPrompt ? config.systemPrompt : '',
-        typeof config.userPrompt === 'string' && config.userPrompt !== this.legacyUserPrompt ? config.userPrompt : ''
-      ].filter(Boolean).join('\n\n'),
-      chatPrompt: typeof config.chatPrompt === 'string' ? config.chatPrompt : this.defaultChatPrompt,
+      answerPrompt: typeof config.answerPrompt === 'string' ? config.answerPrompt
+        : [this.defaultAnswerPrompt, legacyPrompt].filter(Boolean).join('\n\n'),
+      chatPrompt: typeof config.chatPrompt === 'string' ? config.chatPrompt
+        : [this.defaultChatPrompt, legacyPrompt].filter(Boolean).join('\n\n'),
       temperature
     };
     // Older profiles may still contain the retired provider selector.

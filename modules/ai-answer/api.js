@@ -204,6 +204,32 @@ const AIApi = {
     }
   },
 
+  choiceLabels(question) {
+    return (question.options || []).map((option, index) =>
+      String(option).match(/^\s*([A-Z])[.、．]/i)?.[1]?.toUpperCase() || String.fromCharCode(65 + index));
+  },
+
+  validateAnswer(answer, question) {
+    if (answer.error) return answer.error;
+    const labels = this.choiceLabels(question);
+    if (question.type === 'single_choice') {
+      return labels.includes(answer.answer) ? '' : '单选答案不在题目选项中';
+    }
+    if (question.type === 'multiple_choice') {
+      if (!Array.isArray(answer.answers) || !answer.answers.length) return '多选答案为空';
+      if (new Set(answer.answers).size !== answer.answers.length) return '多选答案包含重复选项';
+      return answer.answers.every(value => labels.includes(value)) ? '' : '多选答案包含题目中不存在的选项';
+    }
+    if (question.type === 'fill_blank') {
+      return Array.isArray(answer.answers) && answer.answers.length === question.blankCount && answer.answers.every(Boolean)
+        ? '' : '填空答案数量不完整';
+    }
+    if (question.type === 'sorting' || question.type === 'matching') {
+      return DropdownQuestions.validateAnswer(question, answer) || '';
+    }
+    return typeof answer.answer === 'string' && answer.answer.trim() ? '' : '答案为空';
+  },
+
   parseAnswers(responseText, questions) {
     const raw = this.stripCodeFence(responseText);
     let parsed;
@@ -229,11 +255,9 @@ const AIApi = {
       const entry = answerList.find(item => Number(item?.questionIndex) === index + 1) || {};
       return this.normalizeAnswerEntry(entry, question, index);
     });
-    if (answers.some(answer => answer.error || (Array.isArray(answer.answers) && !answer.answers.length) ||
-        (Array.isArray(answer.answers) && answer.answers.some(value => !value)) ||
-        (Array.isArray(answer.pairs) && !answer.pairs.length) ||
-        (Object.hasOwn(answer, 'answer') && !answer.answer))) {
-      const error = new Error('AI 返回的答案不完整或无效');
+    const invalid = answers.map((answer, index) => this.validateAnswer(answer, questions[index])).find(Boolean);
+    if (invalid) {
+      const error = new Error(`AI 返回的答案不完整或无效：${invalid}`);
       error.retryable = true;
       throw error;
     }

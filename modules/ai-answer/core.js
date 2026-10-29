@@ -498,12 +498,15 @@ const AIAnswerCore = {
       const letter = (markerText.match(/[A-Z]/i)?.[0] || fallbackLetter).toUpperCase();
       const input = item.querySelector('input[type="radio"], input[type="checkbox"]');
       const clickable = item.querySelector('label, a, .num_option, .answer_p') || item;
-      const qid = item.getAttribute('qid') || container.getAttribute('data') || '';
-      const answerInput = qid
-        ? container.querySelector(`#answer${qid}, input[type="hidden"][name="answer${qid}"]`)
-        : container.querySelector(
-          'input[type="hidden"][name^="answer"]:not([name^="answertype"]), input[type="hidden"][id^="answer"]:not([id^="answertype"])'
-        );
+      const qid = item.getAttribute('qid') || marker?.getAttribute('qid') || container.getAttribute('data')
+        || container.id?.match(/(\d+)$/)?.[1] || '';
+      const answerNames = qid ? new Set([`answer${qid}`, `answers${qid}`]) : null;
+      const answerFields = Array.from(container.querySelectorAll('input, textarea')).filter(field =>
+        !['radio', 'checkbox'].includes(field.type) && !/^answertype/i.test(field.name || field.id || ''));
+      const answerInput = answerNames
+        ? answerFields.find(field => answerNames.has(field.name) || answerNames.has(field.id)) || null
+        : answerFields.filter(field => /^answers?\d*$/i.test(field.name || field.id || '')).length === 1
+          ? answerFields.find(field => /^answers?\d*$/i.test(field.name || field.id || '')) : null;
 
       return {
         letter,
@@ -727,19 +730,14 @@ const AIAnswerCore = {
   },
 
   async applyFillBlankAnswer(question, answer) {
-    if (!question.fillTargets.length || !Array.isArray(answer.answers)) {
+    if (!question.fillTargets.length || !Array.isArray(answer.answers) ||
+        answer.answers.length !== question.fillTargets.length || answer.answers.some(value => !String(value || '').trim())) {
       return false;
     }
 
-    let insertedCount = 0;
-    question.fillTargets.forEach((target, index) => {
-      const value = answer.answers[index] || '';
-      if (value && this.writeEditorContent(target, value)) {
-        insertedCount += 1;
-      }
-    });
-
-    return insertedCount > 0;
+    const written = question.fillTargets.map((target, index) => this.writeEditorContent(target, answer.answers[index]));
+    if (written.some(result => !result)) throw new Error('部分填空未能写入，已拒绝标记整题成功');
+    return true;
   },
 
   async applyShortAnswer(question, answer) {
@@ -775,24 +773,22 @@ const AIAnswerCore = {
       : normalizedLetters;
 
     if (selectedLetters.some(letter => !question.choiceTargets.some(target => target.letter === letter))) throw new Error('答案包含无法识别的选项');
-    if (this.isExamQuestion(question)) return this.syncChoiceTargets(question, selectedLetters);
-
-    let clicked = false;
-    selectedLetters.forEach(letter => {
-      const target = question.choiceTargets.find(choice => choice.letter === letter || choice.value === letter);
-      if (!target || this.isChoiceSelected(target)) {
-        return;
+    if (!this.isExamQuestion(question)) {
+      const selectedSet = new Set(selectedLetters);
+      for (const target of question.choiceTargets) {
+        if (this.isChoiceSelected(target) === selectedSet.has(target.letter)) continue;
+        const clickTarget = target.clickable || target.item;
+        if (clickTarget && typeof clickTarget.click === 'function') clickTarget.click();
       }
+      if (await this.waitForChoiceState(question, selectedLetters, 2)) return true;
+    }
 
-      const clickTarget = target.item || target.clickable;
-      if (clickTarget && typeof clickTarget.click === 'function') {
-        clickTarget.click();
-        clicked = true;
-      }
-    });
-
-    const synced = this.syncChoiceTargets(question, selectedLetters);
-    return clicked || synced;
+    this.syncChoiceTargets(question, selectedLetters);
+    if (!await this.waitForChoiceState(question, selectedLetters, 5)) {
+      const actual = this.selectedChoiceLetters(question);
+      throw new Error(`选项写入未确认：期望 ${selectedLetters.join('')}，实际 ${actual.join('') || '空'}`);
+    }
+    return true;
   },
 
   isChoiceSelected(target) {
@@ -808,52 +804,88 @@ const AIAnswerCore = {
       || target.item?.getAttribute('aria-pressed') === 'true';
   },
 
+  selectedChoiceLetters(question) {
+    return question.choiceTargets.filter(target => this.isChoiceSelected(target)).map(target => target.letter).sort();
+  },
+
+  choiceAnswerInput(question) {
+    const container = question.container;
+    const qids = [container.getAttribute('data'), container.id?.match(/(\d+)$/)?.[1],
+      ...question.choiceTargets.flatMap(target => [target.item?.getAttribute('qid'), target.marker?.getAttribute('qid')])]
+      .filter(Boolean);
+    const names = new Set(qids.flatMap(qid => [`answer${qid}`, `answers${qid}`]));
+    const fields = Array.from(container.querySelectorAll('input, textarea')).filter(field =>
+      !['radio', 'checkbox'].includes(field.type) && !/^answertype/i.test(field.name || field.id || ''));
+    const exact = fields.find(field => names.has(field.name) || names.has(field.id));
+    if (exact) return exact;
+    const candidates = fields.filter(field => /^answers?\d*$/i.test(field.name || field.id || ''));
+    return candidates.length === 1 ? candidates[0] : null;
+  },
+
+  choiceAnswerValue(question, selectedLetters) {
+    const selectedSet = new Set(selectedLetters);
+    const selectedTargets = question.choiceTargets.filter(target => selectedSet.has(target.letter));
+    return question.type === 'single_choice' ? String(selectedTargets[0]?.value || '') : selectedTargets
+      .map(target => String(target.value || '').trim().toUpperCase()).filter(Boolean).sort().join('');
+  },
+
+  choiceStateMatches(question, selectedLetters) {
+    const expected = [...selectedLetters].sort();
+    if (JSON.stringify(this.selectedChoiceLetters(question)) !== JSON.stringify(expected)) return false;
+    const answerInput = this.choiceAnswerInput(question);
+    if (this.isExamQuestion(question) && !answerInput) return false;
+    return !answerInput || String(answerInput.value || '') === this.choiceAnswerValue(question, selectedLetters);
+  },
+
+  async waitForChoiceState(question, selectedLetters, attempts) {
+    for (let attempt = 0; attempt <= attempts; attempt += 1) {
+      if (this.choiceStateMatches(question, selectedLetters)) return true;
+      if (attempt < attempts) await new Promise(resolve => setTimeout(resolve, 25 * (attempt + 1)));
+    }
+    return false;
+  },
+
   syncChoiceTargets(question, selectedLetters) {
     const selectedSet = new Set(selectedLetters);
     let updated = false;
     const selectedTargets = question.choiceTargets.filter(target => selectedSet.has(target.letter));
-    const qid = question.container.getAttribute('data') || question.container.id?.match(/(\d+)$/)?.[1];
-    const answerInput = this.isExamQuestion(question)
-      ? question.container.querySelector(`input[name="${question.type === 'multiple_choice' ? 'answers' : 'answer'}${qid}"]`)
-      : selectedTargets[0]?.answerInput || question.container.querySelector(
-        'input[type="hidden"][name^="answer"]:not([name^="answertype"]), input[type="hidden"][id^="answer"]:not([id^="answertype"])'
-      );
+    const answerInput = this.choiceAnswerInput(question) || selectedTargets[0]?.answerInput;
     if (this.isExamQuestion(question) && !answerInput) throw new Error('未找到原生选择题答案字段');
 
+    const changedInputs = [];
     question.choiceTargets.forEach(target => {
       const shouldSelect = selectedSet.has(target.letter);
 
       if (target.input && target.input.checked !== shouldSelect) {
         target.input.checked = shouldSelect;
-        this.dispatchChoiceEvents(target.input);
+        changedInputs.push(target.input);
         updated = true;
       }
 
       if (target.marker) {
-        target.marker.classList.toggle(target.selectedClass || 'check_answer', shouldSelect);
-        updated = true;
+        const selectedClass = target.selectedClass || 'check_answer';
+        if (target.marker.classList.contains(selectedClass) !== shouldSelect) {
+          target.marker.classList.toggle(selectedClass, shouldSelect);
+          updated = true;
+        }
       }
 
       if (target.item) {
         if (shouldSelect) {
-          target.item.setAttribute('aria-checked', 'true');
-          target.item.setAttribute('aria-pressed', 'true');
+          if (target.item.getAttribute('aria-checked') !== 'true') target.item.setAttribute('aria-checked', 'true');
+          if (target.item.getAttribute('aria-pressed') !== 'true') target.item.setAttribute('aria-pressed', 'true');
         } else {
           target.item.removeAttribute('aria-checked');
           target.item.removeAttribute('aria-pressed');
         }
-        updated = true;
       }
     });
 
+    // Dispatch after every checkbox/radio has its final state so page handlers never serialize a partial multi-select answer.
+    changedInputs.forEach(input => this.dispatchChoiceEvents(input));
+
     if (answerInput) {
-      const answerValue = question.type === 'single_choice'
-        ? (selectedTargets[0]?.value || '')
-        : selectedTargets
-          .map(target => String(target.value || '').trim().toUpperCase())
-          .filter(Boolean)
-          .sort()
-          .join('');
+      const answerValue = this.choiceAnswerValue(question, selectedLetters);
 
       if (answerInput.value !== answerValue) {
         answerInput.value = answerValue;

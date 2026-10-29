@@ -856,6 +856,7 @@ const AIChat = {
           if (!q.remote) {
             const fresh = AIAnswerCore.parseQuestionContainer(q.container, q.docRef, q.sectionHeader);
             if (!fresh || fresh.id !== snap.id || fresh.title !== snap.title || fresh.type !== snap.type ||
+                !QuestionContainers.sameContext(fresh, snap) ||
                 JSON.stringify(fresh.options) !== JSON.stringify(snap.options) ||
                 JSON.stringify(fresh.existingAnswer) !== JSON.stringify(snap.existingAnswer) ||
                 (snap.type === 'programming' && fresh.answerDraft !== snap.answerDraft) ||
