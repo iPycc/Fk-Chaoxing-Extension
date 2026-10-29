@@ -9,10 +9,11 @@ const AIApi = {
     model: ''
   },
 
-  buildPrompt(questions, relatedOnly = false) {
+  buildPrompt(questions) {
     const payload = {
       questions: questions.map((question, index) => ({
         questionIndex: index + 1,
+        pageIndex: question.index || index + 1,
         type: question.type,
         title: question.title,
         parentTitle: question.parentTitle || '',
@@ -27,41 +28,36 @@ const AIApi = {
       }))
     };
 
+    return `题目数据如下：\n${JSON.stringify(payload, null, 2)}`;
+  },
+
+  requestText(request) {
+    if (request.mode !== 'chat') {
+      const keys = new Set(request.target.map(q => `${q.index}:${q.id}`));
+      const extra = request.context.filter(q => !keys.has(`${q.index}:${q.id}`));
+      return `${this.buildPrompt(request.target)}\n\n辅助题目上下文：\n${JSON.stringify(extra, null, 2)}\n\n` +
+        (request.mode === 'extract' ? '请整理讨论中已确定的答案。' : '请解答作答目标。');
+    }
+    const indices = keys => keys.map(key => key.split(':')[0]).join('、');
+    const referenceKeys = request.referenceKeys || request.context.map(q => `${q.index}:${q.id}`);
     return [
-      '你是超星答题助手，请严格按照要求返回 JSON。',
-      '只允许输出一个 JSON 对象，不要输出 Markdown 代码块，不要输出解释文字。',
-      '返回格式如下：',
-      '{',
-      '  "answers": [',
-      '    { "questionIndex": 1, "type": "fill_blank", "answers": ["答案1", "答案2"] },',
-      '    { "questionIndex": 2, "type": "single_choice", "answer": "A" },',
-      '    { "questionIndex": 3, "type": "multiple_choice", "answers": ["A", "C"] },',
-      '    { "questionIndex": 4, "type": "short_answer", "answer": "简洁答案" },',
-      '    { "questionIndex": 5, "type": "sorting", "answers": ["C", "B", "A"] },',
-      '    { "questionIndex": 6, "type": "matching", "pairs": [{"left": "1", "right": "B"}, {"left": "2", "right": "A"}] }',
-      '  ]',
-      '}',
-      '',
-      '答题约束：',
-      '- `fill_blank` 必须返回 `answers` 数组，数组长度必须等于 blankCount。',
-      '- `single_choice` 必须返回 `answer` 字段，只能是单个大写选项字母，例如 A。',
-      '- `multiple_choice` 必须返回 `answers` 数组，数组元素必须是大写选项字母。',
-      '- `short_answer` 必须返回 `answer` 字段，内容简洁直接，不要带题号。',
-      '- `programming` 必须返回 `answer` 字段，内容为完整纯文本代码，保留原代码的注释和适合课程的解题步骤。',
-      '- 程序题 `codeStatus` 为 `unavailable` 表示未读取到答题区代码，不可声称已经看到注释。',
-      '- `sorting` 必须返回 `answers` 数组，按题目要求从左到右排列全部选项字母，每个选项恰好一次，禁止按字母重新排序。',
-      '- `matching` 必须返回 `pairs` 数组，left 使用第1组的显示编号，right 使用第2组的显示字母；每个左侧项目恰好一次，右侧选项可重复。',
-      relatedOnly
-        ? '- 只提取本轮用户提问和助手回复中明确解答的题目；不要根据题干自行推断或补全答案。'
-        : '- 如果无法确定，请尽量给出最可能答案，但仍然必须遵守 JSON 结构。',
-      ...(relatedOnly ? [
-        '- 如果回复与题目无关，返回 {"related":false}。',
-        '- 如果回复解答了部分题目，返回 {"related":true,"answers":[...]}，只列出已解答题目，questionIndex 按下面题目数据中的序号。'
-      ] : []),
-      '',
-      '题目数据如下：',
-      JSON.stringify(payload, null, 2)
+      ...(referenceKeys.length ? [`本轮引用：第 ${indices(referenceKeys)} 题。`] : []),
+      ...(request.addedKeys?.length ? [`本轮加入资料：第 ${indices(request.addedKeys)} 题。`] : []),
+      ...(request.updatedKeys?.length ? [`本轮更新资料：第 ${indices(request.updatedKeys)} 题，以最新题目资料为准。`] : []),
+      ...(request.focusKeys?.length ? [`最近引用范围：第 ${indices(request.focusKeys)} 题；具体讨论对象以用户输入为准。`] : []),
+      `本轮输入：\n${request.input || '仅加入题目资料，暂不解答。'}`
     ].join('\n');
+  },
+
+  buildMessages(config, request, history = []) {
+    const system = { role: 'system', content: AIConfig.buildSystemPrompt(config, request.mode) };
+    if (request.mode === 'chat') {
+      return [system,
+        ...(request.context.length ? [{ role: 'user', content: this.withImages(
+          `当前对话已加入的题目资料（每题仅列一次；历史引用按页面题号对应）：\n${JSON.stringify(request.context, null, 2)}`, request.context) }] : []),
+        ...history, { role: 'user', content: this.requestText(request) }];
+    }
+    return [system, ...history, { role: 'user', content: this.withImages(this.requestText(request), request.context) }];
   },
 
   withImages(text, questions = []) {
@@ -104,24 +100,18 @@ const AIApi = {
 
   async getAnswers(questions, requestConfig, conversationReply = '', relatedOnly = false) {
     const config = requestConfig ? this.normalizeConfig(requestConfig) : await this.loadConfig();
-    const prompt = `${this.buildPrompt(questions, relatedOnly)}\n\n用户提示词：\n${config.userPrompt}${conversationReply ? `\n\n${conversationReply}` : ''}`;
+    const request = { mode: relatedOnly ? 'extract' : 'answer', context: questions, target: questions };
+    const history = conversationReply ? [{ role: 'user', content: `讨论记录：\n${conversationReply}` }] : [];
     this.validateConfig(config);
+    const timeoutSeconds = config.timeoutSeconds ?? (await AIConfig.loadBatchSettings()).timeoutSeconds;
 
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
         type: 'AI_API_REQUEST',
         data: {
           config,
-          messages: [
-            {
-              role: 'system',
-              content: AIConfig.buildSystemPrompt(config.systemPrompt, { structured: true, relatedOnly })
-            },
-            {
-              role: 'user',
-              content: this.withImages(prompt, questions)
-            }
-          ]
+          timeoutSeconds,
+          messages: this.buildMessages(config, request, history)
         }
       }, (response) => {
         if (chrome.runtime.lastError) {
@@ -135,6 +125,7 @@ const AIApi = {
         } else {
           const error = new Error(response?.error || 'AI API 请求失败');
           error.retryable = response?.retryable === true || !response;
+          error.contextLimit = response?.contextLimit === true;
           reject(error);
         }
       });

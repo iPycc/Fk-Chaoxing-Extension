@@ -28,8 +28,8 @@ const DropdownQuestions = {
       return { type, options: items.map(item => `${item.id}. ${item.text}`), sortingLabels: items.map(item => item.id) };
     }
     if (type === 'matching') {
-      const left = this.readItems(container.querySelectorAll('.line_wid_400.fl .lineCt, .firstUlList > li:not(.groupTitile)'));
-      const right = this.readItems(container.querySelectorAll('.line_wid_400.fr .lineCt, .secondUlList > li:not(.groupTitile)'));
+      const left = this.readItems(container.querySelectorAll('.line_wid_400.fl .lineCt, .line_wid_half.fl .lineCt, .firstUlList > li:not(.groupTitile)'));
+      const right = this.readItems(container.querySelectorAll('.line_wid_400.fr .lineCt, .line_wid_half.fr .lineCt, .secondUlList > li:not(.groupTitile)'));
       return { type, options: [], matchingGroups: { left, right } };
     }
     return null;

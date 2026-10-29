@@ -14,6 +14,7 @@ const DialogueAssistant = {
   nextStateRequestId: 0,
   reasoningEffort: null,
   profileId: null,
+  profileConfig: null,
   profileDefaultEffort: '',
   profileLoadId: 0,
 
@@ -55,6 +56,7 @@ const DialogueAssistant = {
       const effort = AIConfig.efforts.includes(active?.reasoningEffort) ? active.reasoningEffort : '';
       if (resetSelection || id !== this.profileId || this.reasoningEffort === null) this.reasoningEffort = effort;
       this.profileId = id;
+      this.profileConfig = active || null;
       this.profileDefaultEffort = effort;
       this.render();
     } catch (err) {
@@ -365,13 +367,18 @@ const DialogueAssistant = {
           this.setDraft(this.generated);
           this.setStatus('正在生成…');
         } else if (message.type === 'done') {
+          if (typeof message.text === 'string') {
+            this.generated = message.text;
+            this.setDraft(this.generated);
+          }
           if (!this.generated.trim()) {
             this.finish(port, '生成失败：模型未返回回复', 'error');
           } else {
             this.session = {
               system: turn.system,
               agentTexts: turn.agentTexts,
-              messages: [...turn.messages, { role: 'assistant', content: this.generated }]
+              messages: [...turn.messages, { role: 'assistant', content: this.generated,
+                ...(message.protocolState ? { protocolState: message.protocolState } : {}) }]
             };
             this.finish(port, '回复已生成，请检查后发送');
           }
@@ -384,7 +391,8 @@ const DialogueAssistant = {
       port.onDisconnect.addListener(() => {
         if (this.port === port) this.finish(port, '连接已中断，已生成内容可继续编辑', 'error');
       });
-      port.postMessage({ type: 'start', messages: turn.messages, reasoningEffort: this.reasoningEffort });
+      port.postMessage({ type: 'start', messages: turn.messages, reasoningEffort: this.reasoningEffort,
+        ...(this.profileConfig ? { config: this.profileConfig } : {}) });
       this.keepAliveTimer = setInterval(() => {
         if (this.port !== port) return;
         try { port.postMessage({ type: 'ping' }); }

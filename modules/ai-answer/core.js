@@ -3,6 +3,65 @@ const AIAnswerCore = {
   isProcessing: false,
   questionIds: new WeakMap(),
   nextQuestionId: 1,
+  examSaveQueue: Promise.resolve(),
+
+  isExamQuestion(question) {
+    return /^sigleQuestionDiv_\d+$/.test(question?.container?.id || '') &&
+      question.container.ownerDocument.getElementById('answerMode')?.value === '1';
+  },
+
+  async saveExamAnswer(question, { signal, timeoutSeconds } = {}) {
+    signal?.throwIfAborted();
+    const container = question.container;
+    const id = `${Date.now()}-${Math.random()}`;
+    const fields = Array.from(container.querySelectorAll('input, textarea')).filter(field =>
+      /^answers?\d+$/.test(field.name) || /^answerEditor\d+$/.test(field.name)
+    ).map(field => ({ id: field.id, name: field.name, value: field.value }));
+    const frames = Array.from(container.querySelectorAll('iframe')).map(frame => ({ id: frame.id, html: frame.contentDocument?.body?.innerHTML }));
+    if (!fields.length) throw new Error('未找到原生答案字段');
+    timeoutSeconds ??= (await AIConfig.loadBatchSettings()).timeoutSeconds;
+    signal?.throwIfAborted();
+    const timeoutMs = AIConfig.normalizeTimeoutSeconds(timeoutSeconds) * 1000;
+    return new Promise((resolve, reject) => {
+      let timer;
+      const cleanup = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', cancel);
+        container.removeEventListener('CX_EXAM_TEMP_SAVE_RESULT', receive);
+        delete container.dataset.cxExamSaveRequest;
+        delete container.dataset.cxExamSaveAccepted;
+        delete container.dataset.cxExamSaveResult;
+      };
+      const cancel = () => {
+        cleanup();
+        container.dispatchEvent(new Event('CX_EXAM_TEMP_SAVE_CANCEL', { bubbles: true }));
+        delete container.dataset.cxExamSaveResult;
+        reject(signal.reason);
+      };
+      const receive = () => {
+        let result;
+        try { result = JSON.parse(container.dataset.cxExamSaveResult); } catch (_) { return; }
+        if (result.id !== id) return;
+        cleanup();
+        if (signal?.aborted) reject(signal.reason);
+        else if (!result.ok) reject(new Error(result.error));
+        else resolve(true);
+      };
+      container.addEventListener('CX_EXAM_TEMP_SAVE_RESULT', receive);
+      signal?.addEventListener('abort', cancel, { once: true });
+      timer = setTimeout(() => {
+        cleanup();
+        container.dispatchEvent(new Event('CX_EXAM_TEMP_SAVE_CANCEL', { bubbles: true }));
+        delete container.dataset.cxExamSaveResult;
+        reject(new Error('等待单题暂存超时'));
+      }, timeoutMs);
+      container.dataset.cxExamSaveRequest = JSON.stringify({ id, timeoutMs, fields, frames });
+      container.dispatchEvent(new Event('CX_EXAM_TEMP_SAVE', { bubbles: true }));
+      if (container.dataset.cxExamSaveAccepted !== id && container.dataset.cxExamSaveRequest) {
+        cleanup(); reject(new Error('页面暂存桥接未准备好，请刷新页面后重试'));
+      }
+    });
+  },
 
   async processAllQuestions(requestConfig) {
     if (this.isProcessing) {
@@ -27,6 +86,7 @@ const AIAnswerCore = {
       const config = requestConfig ? AIApi.normalizeConfig(requestConfig) : await AIApi.loadConfig();
       AIApi.validateConfig(config);
       const settings = await AIConfig.loadBatchSettings();
+      config.timeoutSeconds = settings.timeoutSeconds;
       const autoApplyEnabled = await this.isAutoApplyEnabled();
       await AINotify.init();
       AINotify.updateModelSelect();
@@ -36,24 +96,37 @@ const AIAnswerCore = {
         batches.push(questions.slice(offset, offset + settings.batchSize));
       }
       AINotify.info(`开始处理 ${batches.length} 片，每片最多 ${settings.batchSize} 题，同时最多 ${settings.concurrency} 片`);
-      const result = { answeredCount: 0, appliedCount: 0, skippedCount: 0, failures: [] };
+      const result = { answeredCount: 0, appliedCount: 0, skippedCount: 0, savedCount: 0, failures: [] };
       let nextBatch = 0;
       let displayQueue = Promise.resolve();
+      let writingError;
 
       const worker = async () => {
-        while (nextBatch < batches.length) {
+        while (nextBatch < batches.length && !writingError) {
           const batch = batches[nextBatch++];
           const start = batch[0].index;
           const end = batch[batch.length - 1].index;
           try {
             const answers = await this.answerBatch(batch, config, settings.maxRetries);
             const display = displayQueue.then(async () => {
+              if (writingError) throw writingError;
               this.displayAnswers(batch, answers);
               result.answeredCount += batch.length;
               if (autoApplyEnabled) {
-                const applied = await this.applyAnswers(batch, answers);
+                let applied;
+                try { applied = await this.applyAnswers(batch, answers, { timeoutSeconds: settings.timeoutSeconds }); }
+                catch (error) {
+                  if (error.examSaveError) {
+                    writingError = error;
+                    result.appliedCount += error.appliedCount || 0;
+                    result.skippedCount += error.skippedCount || 0;
+                    result.savedCount += error.savedCount || 0;
+                  }
+                  throw error;
+                }
                 result.appliedCount += applied.appliedCount;
                 result.skippedCount += applied.skippedCount;
+                result.savedCount += applied.savedCount || 0;
               }
               AINotify.success(`第 ${start}–${end} 题完成（${result.answeredCount}/${questions.length}）`);
               GlobalLogger.info(`第 ${start}–${end} 题完成（${result.answeredCount}/${questions.length}）`);
@@ -84,6 +157,8 @@ const AIAnswerCore = {
       if (autoApplyEnabled && result.skippedCount > 0) {
         AINotify.warning(`有 ${result.skippedCount} 题未写入，请查看逐题日志中的具体原因`);
       }
+      if (result.savedCount) AINotify.info(`其中 ${result.savedCount} 题已填写并暂存；最终交卷请手动操作`);
+      if (writingError) AINotify.error(`已暂停后续填写：${this.escapeHtml(writingError.message)}`);
       return result;
     } catch (err) {
       console.error('[AI] 处理失败:', err);
@@ -189,6 +264,7 @@ const AIAnswerCore = {
         .map(target => target.letter);
     return {
       id: this.questionIds.get(container),
+      exam: this.isExamQuestion({ container }),
       title,
       sectionHeader,
       ...QuestionContainers.describe(container),
@@ -442,9 +518,10 @@ const AIAnswerCore = {
     });
   },
 
-  async applyAnswers(questions, answers) {
+  async applyAnswers(questions, answers, options = {}) {
     let appliedCount = 0;
     let skippedCount = 0;
+    let savedCount = 0;
 
     for (let index = 0; index < questions.length; index += 1) {
       const question = questions[index];
@@ -452,24 +529,46 @@ const AIAnswerCore = {
       try {
         if (answer?.error) throw new Error(answer.error);
         const applied = question.remote
-          ? await AIChat.applyRemote(question, AIChat.snapshot(question), answer).then(() => true)
-          : await this.applyAnswerToQuestion(question, answer);
+          ? await AIChat.applyRemote(question, AIChat.snapshot(question), answer, options).then(() => true)
+          : await this.applyAnswerToQuestion(question, answer, options);
         if (applied) {
           appliedCount += 1;
+          if (question.exam) savedCount += 1;
         } else {
           skippedCount += 1;
           AINotify.warning(`题目${question.index || index + 1}未写入：答案为空或缺少可用控件`);
         }
       } catch (err) {
+        if (err.examSaveError) throw Object.assign(err, { appliedCount, skippedCount: skippedCount + 1, savedCount });
         skippedCount += 1;
         AINotify.warning(`题目${question.index || index + 1}未完成填写：${this.escapeHtml(err.message)}`);
       }
     }
 
-    return { appliedCount, skippedCount };
+    return { appliedCount, skippedCount, savedCount };
   },
 
-  async applyAnswerToQuestion(question, answer) {
+  async applyAnswerToQuestion(question, answer, options = {}) {
+    if (!this.isExamQuestion(question)) return this.writeAnswerToQuestion(question, answer);
+    let written = false;
+    const apply = this.examSaveQueue.then(async () => {
+      options.signal?.throwIfAborted();
+      const applied = await this.writeAnswerToQuestion(question, answer);
+      if (!applied) throw new Error('未找到可写入的答案控件');
+      written = true;
+      await this.saveExamAnswer(question, options);
+      return true;
+    });
+    this.examSaveQueue = apply.catch(() => {});
+    try { return await apply; }
+    catch (error) {
+      throw Object.assign(new Error(`题目 ${question.index || ''} ${written ? '已填写但暂存未确认' : '填写前检查失败'}：${error.message}`), {
+        examSaveError: true, name: error.name
+      });
+    }
+  },
+
+  async writeAnswerToQuestion(question, answer) {
     if (!question || !answer) {
       return false;
     }
@@ -537,17 +636,20 @@ const AIAnswerCore = {
     const choices = targets.map((target, index) => {
       const label = sorting ? answer.answers[index] : answer.pairs.find(pair => pair.left === target.left)?.right;
       const prefix = sorting ? 'sortSelect' : 'connlineSelect';
-      if (!target.span?.classList.contains(`${prefix}${qid}`)) throw new Error('无法识别下拉框答案控件');
+      const homeworkControl = target.span?.classList.contains(`${prefix}${qid}`);
+      const examControl = !homeworkControl && target.span?.classList.contains('select') && target.span.getAttribute('dataid') === qid;
+      if (!homeworkControl && !examControl) throw new Error('无法识别下拉框答案控件');
       const candidates = Array.from(target.box.querySelectorAll('ul.options > li'))
         .filter(item => DropdownQuestions.text(item.querySelector('a')?.textContent) === label &&
-          item.getAttribute('qid') === qid && item.getAttribute('qtype') === (sorting ? '13' : '11'));
+          (item.getAttribute('qid') === qid || (examControl && !item.hasAttribute('qid'))) &&
+          (item.getAttribute('qtype') === (sorting ? '13' : '11') || (examControl && !item.hasAttribute('qtype'))));
       if (candidates.length !== 1) throw new Error(`找不到唯一的下拉选项 ${label}`);
       const item = candidates[0];
       const value = item.getAttribute('data');
       if (!value) throw new Error('下拉选项缺少内部值');
       const name = target.span.getAttribute('data');
       if (!sorting && !/^\d+$/.test(name || '')) throw new Error('连线控件缺少有效内部编号');
-      return { ...target, item, label, value, name };
+      return { ...target, item, label, value, name, examControl };
     });
     if (!sorting && new Set(choices.map(choice => choice.name)).size !== expectedCount) {
       throw new Error('连线控件内部编号重复');
@@ -555,11 +657,18 @@ const AIAnswerCore = {
 
     for (const choice of choices) {
       if (!choice.item.isConnected) throw new Error('填写时控件已失效，请重新提取题目');
-      choice.item.click();
+      if (this.isExamQuestion(question)) {
+        choice.span.setAttribute('value', choice.value);
+        choice.span.textContent = choice.label;
+      } else choice.item.click();
     }
     if (choices.some(choice => choice.span.getAttribute('value') !== choice.value ||
         DropdownQuestions.text(choice.span.textContent) !== choice.label)) {
       throw new Error('下拉框显示或选中值未更新，请检查页面');
+    }
+    if (choices.every(choice => choice.examControl)) {
+      hidden.value = sorting ? choices.map(choice => choice.value).join('') : JSON.stringify(choices
+        .map(choice => ({ name: Number(choice.name), content: choice.value })).sort((a, b) => a.name - b.name));
     }
     if (sorting) {
       if (hidden.value !== choices.map(choice => choice.value).join('')) {
@@ -571,8 +680,8 @@ const AIAnswerCore = {
       const expected = choices.map(choice => ({ name: choice.name, content: choice.value }));
       const canonical = entries => JSON.stringify(entries.map(entry => ({ name: entry.name, content: entry.content }))
         .sort((a, b) => Number(a.name) - Number(b.name)));
-      if (!Array.isArray(saved) || saved.length !== expected.length || saved.some(entry => !entry || typeof entry.name !== 'string' || typeof entry.content !== 'string') ||
-          canonical(saved) !== canonical(expected)) {
+      if (!Array.isArray(saved) || saved.length !== expected.length || saved.some(entry => !entry || !/^\d+$/.test(String(entry.name)) || typeof entry.content !== 'string') ||
+          canonical(saved.map(entry => ({ ...entry, name: String(entry.name) }))) !== canonical(expected)) {
         throw new Error('连线配对与答案字段不一致，请检查页面');
       }
     }
@@ -665,6 +774,9 @@ const AIAnswerCore = {
       ? [normalizedLetters[0]]
       : normalizedLetters;
 
+    if (selectedLetters.some(letter => !question.choiceTargets.some(target => target.letter === letter))) throw new Error('答案包含无法识别的选项');
+    if (this.isExamQuestion(question)) return this.syncChoiceTargets(question, selectedLetters);
+
     let clicked = false;
     selectedLetters.forEach(letter => {
       const target = question.choiceTargets.find(choice => choice.letter === letter || choice.value === letter);
@@ -699,6 +811,14 @@ const AIAnswerCore = {
   syncChoiceTargets(question, selectedLetters) {
     const selectedSet = new Set(selectedLetters);
     let updated = false;
+    const selectedTargets = question.choiceTargets.filter(target => selectedSet.has(target.letter));
+    const qid = question.container.getAttribute('data') || question.container.id?.match(/(\d+)$/)?.[1];
+    const answerInput = this.isExamQuestion(question)
+      ? question.container.querySelector(`input[name="${question.type === 'multiple_choice' ? 'answers' : 'answer'}${qid}"]`)
+      : selectedTargets[0]?.answerInput || question.container.querySelector(
+        'input[type="hidden"][name^="answer"]:not([name^="answertype"]), input[type="hidden"][id^="answer"]:not([id^="answertype"])'
+      );
+    if (this.isExamQuestion(question) && !answerInput) throw new Error('未找到原生选择题答案字段');
 
     question.choiceTargets.forEach(target => {
       const shouldSelect = selectedSet.has(target.letter);
@@ -725,12 +845,6 @@ const AIAnswerCore = {
         updated = true;
       }
     });
-
-    const selectedTargets = question.choiceTargets.filter(target => selectedSet.has(target.letter));
-    const answerInput = selectedTargets[0]?.answerInput
-      || question.container.querySelector(
-        'input[type="hidden"][name^="answer"]:not([name^="answertype"]), input[type="hidden"][id^="answer"]:not([id^="answertype"])'
-      );
 
     if (answerInput) {
       const answerValue = question.type === 'single_choice'

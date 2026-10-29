@@ -31,6 +31,12 @@
 :host pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; }
 :host .thought-entry { margin:0 0 12px; color:#63676c; font-size:13px; }
 :host .thought-entry summary { cursor:pointer; width:fit-content; }
+:host .thought-spinner { display:inline-block; width:11px; height:11px; vertical-align:-1px; border:1.5px solid #d8dadd; border-top-color:currentColor; border-radius:50%; animation:thought-spin .8s linear infinite; }
+:host .thought-elapsed { font-variant-numeric:tabular-nums; }
+@keyframes thought-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) {
+  :host .thought-spinner { animation:none; }
+}
 :host .thought-entry pre { margin-top:8px; padding-left:12px; border-left:2px solid #e5e7eb; line-height:1.65; max-height:180px; overflow:auto; }
 :host .composer { flex:none; border-top:1px solid #e5e7eb; padding:12px; max-height:65%; overflow:auto; }
 :host #question-panel { margin-bottom:8px; font-size:12px; }
@@ -43,6 +49,8 @@
 :host #questions label:hover { color:#111; background:#f9fafb; }
 :host #target { min-width:0; flex:1; padding:6px; }
 :host #context-note { margin:6px 0; color:#71717a; font-size:11px; }
+:host #usage-summary { margin:6px 0; color:#62666b; font-size:11px; }
+:host #context-warning { margin:6px 0; padding:7px 9px; border:1px solid #e8ce8c; border-radius:6px; color:#78520c; background:#fffaf0; font-size:12px; }
 :host #preview-panel { margin-top:8px; font-size:12px; }
 :host #preview-panel summary { cursor:pointer; color:#52525b; }
 :host #preview-text { max-height:110px; overflow:auto; margin-top:6px; padding:8px; background:#f5f5f5; border-radius:4px; font-size:11px; }
@@ -52,12 +60,13 @@
 :host .reference button { padding:0 4px; border:0; font-size:16px; line-height:20px; }
 :host .reference-content { max-height:160px; overflow:auto; white-space:pre-wrap; }
 :host .reference-content p { margin:8px 0; overflow-wrap:anywhere; }
+:host .reference-changes { margin:4px 0; color:#62666b; font-size:11px; }
 :host textarea { display:block; width:100%; height:68px; min-height:54px; max-height:140px; resize:vertical; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font:inherit; }
 :host .actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:6px; margin-top:8px; }
-:host .actions label { margin-right:auto; white-space:nowrap; font-size:12px; }
 :host .actions button { font-size:12px; }
-:host #answer { background:#202124; border-color:#202124; color:#fff; }
-:host #answer:hover { background:#35363a; }
+:host #clear-context { margin-right:auto; }
+:host #send { background:#202124; border-color:#202124; color:#fff; }
+:host #send:hover { background:#35363a; }
 :host #status { flex:none; margin:0 12px 8px; color:#62666b; font-size:12px; overflow-wrap:anywhere; }
 :host #status.error { color:#b91c1c; }
 :host .candidate { padding:12px 0; border-top:1px solid #e5e7eb; }

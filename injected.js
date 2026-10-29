@@ -6,6 +6,80 @@
 
   const LOG_PREFIX = '[Fk-Chaoxing]';
 
+  // Exam saves use the site's serializer and temporary-save callback, never final submission.
+  const examSaves = new Map();
+  document.addEventListener('CX_EXAM_TEMP_SAVE_CANCEL', event => {
+    examSaves.get(event.target)?.();
+  });
+  document.addEventListener('CX_EXAM_TEMP_SAVE', event => {
+    const container = event.target;
+    if (!/^sigleQuestionDiv_\d+$/.test(container?.id || '') || examSaves.has(container)) return;
+    let request;
+    try { request = JSON.parse(container.dataset.cxExamSaveRequest); } catch (_) { return; }
+    if (!request.id || !Number.isFinite(request.timeoutMs) || request.timeoutMs <= 0 || !Array.isArray(request.fields)) return;
+    container.dataset.cxExamSaveAccepted = request.id;
+    const qid = container.id.slice('sigleQuestionDiv_'.length);
+    let finished = false, sent = false, poll, timeout;
+    const finish = error => {
+      if (finished) return;
+      finished = true;
+      clearInterval(poll); clearTimeout(timeout); examSaves.delete(container);
+      container.dataset.cxExamSaveResult = JSON.stringify({ id: request.id, ok: !error, error: error || '' });
+      container.dispatchEvent(new Event('CX_EXAM_TEMP_SAVE_RESULT', { bubbles: true }));
+    };
+    examSaves.set(container, () => finish('已停止等待暂存；已发出的暂存请求可能仍会完成'));
+    const fieldsMatch = () => request.fields.length > 0 && request.fields.every(expected => {
+      const field = Array.from(container.querySelectorAll('input, textarea')).find(node => node.name === expected.name && node.id === expected.id);
+      return field && field.value === expected.value;
+    }) && (request.frames || []).every(expected => {
+      const frame = Array.from(container.querySelectorAll('iframe')).find(node => node.id === expected.id);
+      return frame && frame.contentDocument?.body?.innerHTML === expected.html;
+    });
+    const idle = () => !window.submitOnce && !window.submitAjaxHandle && !window.Edit_Timed_Saving &&
+      !window.Edit_LocalCache_Saving && !window.Ueditor_Attachment_Saving;
+    const step = () => {
+      if (finished) return;
+      try {
+        if (document.getElementById('answerMode')?.value !== '1') throw new Error('当前页面不支持整卷单题暂存');
+        if (!container.isConnected || !fieldsMatch()) throw new Error('答题区已变化，暂存未确认');
+        if (sent) {
+          if (idle()) throw new Error('原生暂存未确认，请检查页面的错误提示');
+          return;
+        }
+        if (!idle()) return;
+        if (typeof window.submitForm !== 'function' || typeof window.setStuAnswerOfSomeQues !== 'function' ||
+            typeof window.changeQuestionCardColor !== 'function' || typeof window.$ !== 'function') {
+          throw new Error('页面未提供可用的单题暂存能力，请刷新后重试');
+        }
+        for (const textarea of container.querySelectorAll('textarea[id^="answer"]')) {
+          if (!window.UE?.getEditor) throw new Error('页面编辑器尚未准备好');
+          const editor = window.UE.getEditor(textarea.id);
+          if (!editor?.setContent || !editor.sync) throw new Error('页面编辑器尚未准备好');
+          editor.setContent(textarea.value, false);
+          editor.sync();
+        }
+        const wrapped = window.$(container);
+        window.setStuAnswerOfSomeQues(wrapped);
+        if (!fieldsMatch()) throw new Error('原生答案字段与填写内容不一致，已暂停暂存');
+        sent = true;
+        window.submitForm(true, wrapped, () => {
+          if (finished) return;
+          try {
+            if (!container.isConnected || !fieldsMatch()) throw new Error('暂存期间答题区已变化，结果未确认');
+            window.changeQuestionCardColor(qid);
+            if (!document.getElementById(`answerSheet${qid}`)?.classList.contains('active') || container.classList.contains('_unsavedstate')) {
+              throw new Error('页面未确认本题已作答，暂存未确认');
+            }
+            finish();
+          } catch (error) { finish(error.message); }
+        });
+      } catch (error) { finish(error.message); }
+    };
+    timeout = setTimeout(() => finish('等待单题暂存超时'), request.timeoutMs);
+    poll = setInterval(step, 100);
+    step();
+  });
+
   // Synchronous bridge to the page-owned CodeMirror 5 instance. DOM line nodes
   // may be virtualized, so they must never be treated as the complete source.
   document.addEventListener('CX_CODE_EDITOR_READ', event => {

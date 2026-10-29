@@ -37,7 +37,8 @@ const QuestionContainers = {
     // Use the actual choice marker to find its row before falling back to layout.
     const markers = Array.from(container.querySelectorAll('.num_option, .num_option_dx'));
     const rows = markers.map(marker => {
-      const row = marker.closest('.answerBg, .hoverDiv, [qid], li, .clearfix') || marker.parentElement;
+      // The marker itself can carry qid; start from its parent to keep the answer text.
+      const row = marker.parentElement?.closest('.answerBg, .hoverDiv, [qid], li, .clearfix') || marker.parentElement;
       return row !== container && container.contains(row) &&
         row.closest('.reading_answer, .singleQuesId, .questionLi, .TiMu') === container ? row : null;
     }).filter(Boolean);
