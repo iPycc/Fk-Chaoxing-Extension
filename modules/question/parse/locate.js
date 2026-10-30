@@ -62,6 +62,16 @@ const QuestionContainers = {
     })).filter(image => image.url) : [];
   },
 
+  withImageLinks(text = '', root) {
+    const seen = new Set();
+    const links = this.images(root).filter(image => {
+      if (seen.has(image.url) || text.includes(image.url)) return false;
+      seen.add(image.url);
+      return true;
+    }).map(image => `![题目图片](<${image.url}>)`);
+    return [text.trim(), ...links].filter(Boolean).join('\n');
+  },
+
   text(root) {
     if (!root) return '';
     const clone = root.cloneNode(true);

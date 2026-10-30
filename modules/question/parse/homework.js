@@ -54,7 +54,7 @@ const HomeworkExtractor = {
     const stem = this.normalizeText(titleEl?.textContent || '')
       .replace(/^\d+\.\s*/, '')
       .replace(/^\((?:单选题|多选题|判断题|填空题|简答题|排序题|连线题)\)\s*/, '');
-    const title = this.normalizeText(`${typeLabel} ${stem}`);
+    const title = QuestionContainers.withImageLinks(this.normalizeText(`${typeLabel} ${stem}`), QuestionContainers.stemRoot(container));
 
     if (!title) return null;
     const dropdown = DropdownQuestions.extract(container);
@@ -62,7 +62,7 @@ const HomeworkExtractor = {
 
     const options = this.sortOptions(Array.from(container.querySelectorAll('.stem_answer .answerBg')).map((el, idx) => {
       const letter = this.getOptionLetter(idx);
-      const content = this.normalizeText(el.querySelector('.answer_p')?.textContent || el.textContent || '');
+      const content = QuestionContainers.withImageLinks(this.normalizeText(el.querySelector('.answer_p')?.textContent || el.textContent || ''), el);
       return letter && content ? `${letter}. ${content}` : '';
     }).filter(Boolean));
 
@@ -81,7 +81,7 @@ const HomeworkExtractor = {
     const getTitleFrom = (root) => {
       const node = root.querySelector('.Zy_TItle .fontLabel, .Zy_Title .fontLabel, .newZy_TItle .fontLabel, .newZy_Title .fontLabel')
         || root.querySelector('.Zy_TItle, .Zy_Title, .newZy_TItle, .newZy_Title');
-      return this.normalizeText(node?.textContent || '');
+      return QuestionContainers.withImageLinks(this.normalizeText(node?.textContent || ''), QuestionContainers.stemRoot(root));
     };
 
     const containers = Array.from(doc.querySelectorAll('.TiMu'));
@@ -95,7 +95,7 @@ const HomeworkExtractor = {
 
         const options = lis.map((li, idx) => {
           const p = li.querySelector('p') || li.querySelector('a') || li;
-          const text = this.normalizeText(p?.textContent || '');
+          const text = QuestionContainers.withImageLinks(this.normalizeText(p?.textContent || ''), li);
           return `${String.fromCharCode(65 + idx)}. ${text}`;
         }).filter(Boolean);
 
@@ -108,6 +108,9 @@ const HomeworkExtractor = {
       '.questionLi.singleQuesId, .singleQuesId[id^="question"], .singleQuesId[typename]'
     ));
     modernContainers.forEach(container => {
+      // Legacy wrappers were already read through their inner TiMu. Adding
+      // image-only titles must not count the enclosing wrapper a second time.
+      if (container.querySelector('.TiMu')) return;
       const question = this.parseModernQuestion(container);
       if (question) questions.push(withContainers ? { ...question, container, docRef: doc } : question);
     });
@@ -128,13 +131,13 @@ const HomeworkExtractor = {
     const set = new Set();
 
     primary.forEach(sel => doc.querySelectorAll(sel).forEach(n => {
-      const text = this.normalizeText(n.textContent || '');
+      const text = QuestionContainers.withImageLinks(this.normalizeText(n.textContent || ''), n);
       if (text) set.add(text);
     }));
 
     if (set.size === 0) {
       fallback.forEach(sel => doc.querySelectorAll(sel).forEach(n => {
-        const text = this.normalizeText(n.textContent || '');
+        const text = QuestionContainers.withImageLinks(this.normalizeText(n.textContent || ''), n);
         if (text) set.add(text);
       }));
     }

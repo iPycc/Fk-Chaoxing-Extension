@@ -54,7 +54,7 @@ const ExamExtractor = {
     const titleEl = container.querySelector('h3.mark_name.colorDeep');
     const stem = this.extractTitle(titleEl);
     const typeLabel = this.getTypeLabel(container);
-    const title = this.normalizeText(`${typeLabel} ${stem}`);
+    const title = QuestionContainers.withImageLinks(this.normalizeText(`${typeLabel} ${stem}`), QuestionContainers.stemRoot(container));
 
     const dropdown = DropdownQuestions.extract(container);
     if (dropdown) return { title, ...dropdown };
@@ -89,7 +89,7 @@ const ExamExtractor = {
 
     optionEls.forEach((el, idx) => {
       const letter = this.getOptionLetter(idx);
-      const content = this.normalizeText(el.querySelector('.answer_p')?.textContent || el.textContent || '');
+      const content = QuestionContainers.withImageLinks(this.normalizeText(el.querySelector('.answer_p')?.textContent || el.textContent || ''), el);
       if (letter && content) {
         options.push(`${letter}. ${content}`);
       }
