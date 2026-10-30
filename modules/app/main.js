@@ -62,12 +62,13 @@ const ChaoxingHelper = {
       if (!(isExam || isHomeworkOrChapter || isHomeworkWorkPage)) return;
       const result = await QuestionCollector.collectStable();
       if (result.status !== 'stable') {
+        chrome.runtime.sendMessage({ action: 'updateBadge', count: 0 });
         GlobalLogger.warning(QuestionReport.message(result.diagnostics));
         return;
       }
       const count = result.snapshot.items.length;
       GlobalLogger.success(`自动提取完成，共 ${count} 道题目`);
-      chrome.runtime.sendMessage({ action: 'updateBadge', count });
+      chrome.runtime.sendMessage({ action: 'updateBadge', count, snapshotId: result.snapshot.id });
     } catch (err) {
       console.error('[Fk-Chaoxing] 自动提取失败', err);
     }

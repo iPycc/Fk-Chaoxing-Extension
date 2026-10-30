@@ -35,11 +35,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     return true; // 保持消息通道开放
   } else if (request.action === 'updateBadge') {
-    // 允许 content script 触发徽章更新
+    // Only the top frame owns the tab badge. Child-frame partial counts must
+    // never overwrite the stable page snapshot.
     try {
-      if (sender.tab && sender.tab.id) {
+      if (sender.tab?.id && (sender.frameId ?? 0) === 0) {
         chrome.action.setBadgeText({
-          text: request.count.toString(),
+          text: Number.isInteger(request.count) && request.count > 0 ? String(request.count) : '',
           tabId: sender.tab.id
         });
         chrome.action.setBadgeBackgroundColor({
@@ -47,7 +48,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           tabId: sender.tab.id
         });
         sendResponse({ success: true });
-      }
+      } else sendResponse({ success: false, ignored: true });
     } catch (e) {
       log.error('Update badge error: ' + e.message);
     }

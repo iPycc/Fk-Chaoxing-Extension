@@ -525,7 +525,10 @@ class PopupController {
     this.btnExtractAuto.disabled = true;
     try {
       const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' }, { frameId: 0 });
-      if (!result?.success) throw new Error(result?.message || '获取题目失败');
+      if (!result?.success) {
+        await chrome.action.setBadgeText({ text: '', tabId: this.currentTab.id });
+        throw new Error(result?.message || '获取题目失败');
+      }
       await chrome.action.setBadgeText({ text: String(result.count), tabId: this.currentTab.id });
       this.log('success', `共获取 ${result.count} 道题目`);
       await chrome.tabs.sendMessage(this.currentTab.id, { action: 'showQuestionModal', content: result.content }, { frameId: 0 });
@@ -571,7 +574,7 @@ class PopupController {
       if (result?.success && result.count > 0) {
         await chrome.action.setBadgeText({ text: String(result.count), tabId: this.currentTab.id });
         await chrome.action.setBadgeBackgroundColor({ color: '#f53f3f', tabId: this.currentTab.id });
-      }
+      } else await chrome.action.setBadgeText({ text: '', tabId: this.currentTab.id });
     } catch (err) { /* Page may not be ready. */ }
   }
 

@@ -63,6 +63,8 @@ const QuestionCollector = {
   },
 
   async collectStable({ parser, maxMs } = {}) {
+    parser ||= typeof AIAnswerCore !== 'undefined'
+      ? (container, doc, header) => AIAnswerCore.parseQuestionContainer(container, doc, header) : null;
     if (typeof CopyEnabler !== 'undefined') await CopyEnabler.ready().catch(() => {});
     const result = await QuestionStable.wait(() => this.collectOnce(document, { parser }), document, { maxMs });
     const live = result.sections.flatMap(section => section.questions);
@@ -74,9 +76,7 @@ const QuestionCollector = {
   },
 
   async collectLive() {
-    const parser = typeof AIAnswerCore !== 'undefined'
-      ? (container, doc, header) => AIAnswerCore.parseQuestionContainer(container, doc, header) : null;
-    return this.collectStable({ parser });
+    return this.collectStable();
   },
 
   async collectAll() {
