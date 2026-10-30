@@ -2,8 +2,7 @@
 const AIChat = {
   root: null, questions: [], history: [], contextQuestions: [], lastReferenceKeys: [], discussionMode: false, pending: null, selected: new Set(),
   lastUsage: null, contextError: null, currentConfig: null, contextInfo: null, infoPort: null, infoRevision: 0,
-  frameQuestions: new Map(), frameApplies: new Map(), remoteWindows: new Map(), replies: new Map(), scanToken: '',
-  quickEffort: null, historyKey: '', opening: null, frameId: `${Date.now()}-${Math.random()}`, launcher: null,
+  quickEffort: null, historyKey: '', opening: null, launcher: null,
   snapshotId: '',
   pageKey() { return `aiChat:${location.origin}${location.pathname}${location.search}`; },
   el(id) { return this.root?.getElementById(id); },
@@ -218,13 +217,6 @@ const AIChat = {
       question.questionKey ||= result.snapshot.items[index]?.questionKey;
       question.editorState ??= this.editorState(question);
     });
-    this.scanToken = `${Date.now()}-${Math.random()}`;
-    this.frameQuestions.clear(); this.remoteWindows.clear();
-    document.querySelectorAll('iframe').forEach(frame => {
-      const origin = QuestionFrame.origin(frame);
-      if (origin) frame.contentWindow?.postMessage({ fkAiChat: 'scan', token: this.scanToken, topOrigin: location.origin }, origin);
-    });
-    await new Promise(resolve => setTimeout(resolve, 350));
   },
   async loadModels() {
     const data = await chrome.storage.local.get(['aiProfiles', 'activeAiProfileId', 'aiConfig']);
@@ -929,92 +921,11 @@ const AIChat = {
     this.el('stop').hidden = !value;
   },
   async applyRemote(q, snap, answer, { signal, timeoutSeconds } = {}) {
-    const target = this.remoteWindows.get(q.remote);
-    if (!target) return Promise.reject(new Error('题目所在页面已失效'));
-    const id = `${Date.now()}-${Math.random()}`;
     timeoutSeconds ??= (await AIConfig.loadBatchSettings()).timeoutSeconds;
     signal?.throwIfAborted();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => { clearTimeout(timer); this.replies.delete(id); signal?.removeEventListener('abort', cancel); };
-      const cancel = () => {
-        cleanup();
-        target.source.postMessage({ fkAiChat: 'cancelApply', token: this.scanToken, id }, target.origin);
-        reject(signal?.reason || Object.assign(new Error('iframe 填写或暂存超时'), { examSaveError: Boolean(q.exam) }));
-      };
-      const timer = setTimeout(cancel, AIConfig.normalizeTimeoutSeconds(timeoutSeconds) * 1000);
-      signal?.addEventListener('abort', cancel, { once: true });
-      this.replies.set(id, result => {
-        cleanup();
-        result.ok ? resolve(result) : reject(Object.assign(new Error(result.error), { examSaveError: result.examSaveError }));
-      });
-      target.source.postMessage({ fkAiChat: 'apply', token: this.scanToken, id, questionId: q.remote, snap,
-        editorState: q.editorState, answer, timeoutSeconds }, target.origin);
-    });
-  },
-  onFrameMessage(event) {
-    if (!/^https?:\/\/([^.]+\.)*chaoxing\.com(?::\d+)?$/.test(event.origin)) return;
-    const msg = event.data;
-    if (!msg || !msg.fkAiChat) return;
-    if (msg.fkAiChat === 'scan') {
-      if (window === window.top || !msg.token) return;
-      this.scanToken = msg.token;
-      this.frameQuestions.clear();
-      const found = QuestionContainers.find(document).map(container =>
-        AIAnswerCore.parseQuestionContainer(container, document, QuestionCollector.findHeaderTitle(document) || document.title || '')
-      ).filter(Boolean);
-      const items = found.map((q, index) => {
-        q.questionKey = QuestionKey.from(q, { doc: document, ordinal: index });
-        const id = `${msg.token}:${this.frameId}:${index}`; this.frameQuestions.set(id, q);
-        return { ...this.snapshot({ ...q, index: index + 1 }), editorState: this.editorState(q), remote: id };
-      });
-      window.top.postMessage({ fkAiChat: 'scanned', token: msg.token, items }, msg.topOrigin);
-      document.querySelectorAll('iframe').forEach(frame => {
-        const origin = QuestionFrame.origin(frame);
-        if (origin) frame.contentWindow?.postMessage(msg, origin);
-      });
-    } else if (msg.fkAiChat === 'scanned' && window === window.top && msg.token === this.scanToken) {
-      for (const item of msg.items || []) {
-        this.remoteWindows.set(item.remote, { source: event.source, origin: event.origin });
-        const index = this.questions.findIndex(question => this.questionKey(question) === this.questionKey(item));
-        if (index >= 0) this.questions[index] = { ...item, index: index + 1 };
-      }
-      if (this.root) this.renderQuestions();
-    } else if (msg.fkAiChat === 'cancelApply' && window !== window.top && msg.token === this.scanToken && event.source === window.top) {
-      this.frameApplies.get(msg.id)?.abort();
-    } else if (msg.fkAiChat === 'apply' && window !== window.top && msg.token === this.scanToken && event.source === window.top) {
-      const controller = new AbortController();
-      this.frameApplies.set(msg.id, controller);
-      const q = this.frameQuestions.get(msg.questionId);
-      const current = q && AIAnswerCore.parseQuestionContainer(q.container, q.docRef, q.sectionHeader);
-      const s = msg.snap;
-      const same = current && current.id === s.id && current.title === s.title && current.type === s.type && QuestionContainers.sameContext(current, s) &&
-        JSON.stringify(current.options) === JSON.stringify(s.options) &&
-        (s.type !== 'programming' || current.answerDraft === s.answerDraft) &&
-        JSON.stringify(current.matchingGroups) === JSON.stringify(s.matchingGroups) &&
-        JSON.stringify(current.existingAnswer) === JSON.stringify(s.existingAnswer) &&
-        this.editorState(q) === msg.editorState;
-      Promise.resolve().then(() => {
-        if (!same) throw new Error('题目或答题区已变化');
-        controller.signal.throwIfAborted();
-        return AIAnswerCore.applyAnswerToQuestion(q, msg.answer, { signal: controller.signal, timeoutSeconds: msg.timeoutSeconds });
-      }).then(result => {
-        controller.signal.throwIfAborted();
-        if (result?.ok) {
-          const updated = AIAnswerCore.parseQuestionContainer(q.container, q.docRef, q.sectionHeader);
-          if (updated) Object.assign(q, updated);
-          q.editorState = this.editorState(q);
-        }
-        window.top.postMessage({ fkAiChat: 'applied', id: msg.id, ok: Boolean(result?.ok),
-          status: result?.status, expected: result?.expected, actual: result?.actual,
-          error: result?.ok ? '' : '无可写入控件', question: result?.ok ? this.snapshot({ ...q, index: s.index }) : null,
-          editorState: result?.ok ? q.editorState : undefined }, event.origin);
-      }).catch(error => window.top.postMessage({ fkAiChat: 'applied', id: msg.id, ok: false, error: error.message,
-        examSaveError: error.examSaveError }, event.origin)).finally(() => this.frameApplies.delete(msg.id));
-    } else if (msg.fkAiChat === 'applied' && window === window.top) {
-      this.replies.get(msg.id)?.(msg); this.replies.delete(msg.id);
-    }
+    return QuestionFrame.apply(q.remote, { ...snap, editorState: q.editorState }, answer,
+      { signal, timeoutSeconds });
   }
 };
 
-window.addEventListener('message', event => AIChat.onFrameMessage(event));
 FK.ai.chat.main = AIChat;

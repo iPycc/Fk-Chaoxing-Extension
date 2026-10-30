@@ -36,6 +36,7 @@ class PopupController {
     this.currentView = 'home';
     this.modelQuery = null;
     this.currentTab = null;
+    this.pageRuntimeReady = false;
     this.isEnabled = true;
     this.init();
   }
@@ -48,6 +49,7 @@ class PopupController {
     const draft = await this.loadAiProfiles();
     await this.getCurrentTab();
     this.detectPageType();
+    await this.checkPageRuntime();
     await this.loadInitialLogs();
     this.updateQuestionCount();
     this.startLogListener();
@@ -485,7 +487,7 @@ class PopupController {
   updateAiAnswerButton() {
     const profile = this.getActiveAiProfile();
     this.btnAiText.textContent = profile ? '打开作答页面' : '请先配置 AI 模型';
-    this.btnAiAnswer.disabled = !this.isEnabled;
+    this.btnAiAnswer.disabled = !this.isEnabled || !this.pageRuntimeReady;
   }
 
   async loadPluginState() {
@@ -496,8 +498,8 @@ class PopupController {
   }
 
   updateButtonsState() {
-    this.btnExtractAuto.disabled = !this.isEnabled;
-    this.btnAiAnswer.disabled = !this.isEnabled;
+    this.btnExtractAuto.disabled = !this.isEnabled || !this.pageRuntimeReady;
+    this.btnAiAnswer.disabled = !this.isEnabled || !this.pageRuntimeReady;
   }
 
   async togglePluginState() {
@@ -509,6 +511,26 @@ class PopupController {
 
   async getCurrentTab() {
     [this.currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  }
+
+  async checkPageRuntime({ report = true } = {}) {
+    this.pageRuntimeReady = false;
+    if (!this.currentTab?.id) return false;
+    try {
+      const info = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getRuntimeInfo' }, { frameId: 0 });
+      this.pageRuntimeReady = info?.success === true && info.protocol === 2;
+    } catch (_) { /* The page may not have a content script yet. */ }
+    if (!this.pageRuntimeReady && report) {
+      await chrome.action.setBadgeText({ text: '', tabId: this.currentTab.id });
+      this.log('error', '页面仍在运行旧脚本或尚未加载插件，请刷新当前页面');
+    }
+    this.updateButtonsState();
+    return this.pageRuntimeReady;
+  }
+
+  async requirePageRuntime() {
+    if (await this.checkPageRuntime({ report: false })) return;
+    throw new Error('页面仍在运行旧脚本，请刷新当前页面后重试');
   }
 
   detectPageType() {
@@ -524,6 +546,7 @@ class PopupController {
     if (!this.isEnabled || !this.currentTab) return;
     this.btnExtractAuto.disabled = true;
     try {
+      await this.requirePageRuntime();
       const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' }, { frameId: 0 });
       if (!result?.success) {
         await chrome.action.setBadgeText({ text: '', tabId: this.currentTab.id });
@@ -535,7 +558,7 @@ class PopupController {
     } catch (err) {
       this.log('error', `获取题目失败：${err.message}`);
     } finally {
-      this.btnExtractAuto.disabled = !this.isEnabled;
+      this.btnExtractAuto.disabled = !this.isEnabled || !this.pageRuntimeReady;
     }
   }
 
@@ -550,6 +573,7 @@ class PopupController {
     this.btnAiAnswer.disabled = true;
     this.aiQuickReasoning.disabled = true;
     try {
+      await this.requirePageRuntime();
       const config = AIConfig.normalize({ ...profile,
         reasoningEffort: this.aiQuickReasoning.value || profile.reasoningEffort });
       this.validateAiProfile(config);
@@ -561,7 +585,7 @@ class PopupController {
     } catch (err) {
       this.log('error', `AI 答题失败：${err.message}`);
     } finally {
-      this.btnAiAnswer.disabled = !this.isEnabled;
+      this.btnAiAnswer.disabled = !this.isEnabled || !this.pageRuntimeReady;
       this.aiQuickReasoning.disabled = false;
       this.resetQuickReasoning();
     }
@@ -570,6 +594,7 @@ class PopupController {
   async updateQuestionCount() {
     if (!this.currentTab) return;
     try {
+      if (!await this.checkPageRuntime({ report: false })) return;
       const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestionCount' }, { frameId: 0 });
       if (result?.success && result.count > 0) {
         await chrome.action.setBadgeText({ text: String(result.count), tabId: this.currentTab.id });
@@ -597,7 +622,8 @@ class PopupController {
   async loadInitialLogs() {
     if (!this.currentTab) return;
     try {
-      const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getLogs' });
+      if (!this.pageRuntimeReady) return;
+      const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getLogs' }, { frameId: 0 });
       if (result?.success) result.logs?.forEach(entry => this.log(entry.type, entry.message));
     } catch (err) { /* Page may not be ready. */ }
   }
@@ -674,7 +700,11 @@ class PopupController {
     on('btn-ai-answer', 'click', () => this.aiAnswer());
     on('btn-extract-auto', 'click', () => this.getQuestions());
     on('plugin-toggle', 'change', () => this.togglePluginState());
-    on('btn-refresh', 'click', () => chrome.runtime.reload());
+    on('btn-refresh', 'click', async () => {
+      if (!this.currentTab?.id) return;
+      await chrome.tabs.reload(this.currentTab.id);
+      window.close();
+    });
     on('btn-clear-log', 'click', () => this.logContainer.replaceChildren());
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;

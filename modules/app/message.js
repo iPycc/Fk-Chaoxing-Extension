@@ -16,6 +16,10 @@ const ContentMessageHandler = {
     try {
       if (window.self !== window.top) return;
       switch (request.action) {
+        case 'getRuntimeInfo':
+          sendResponse({ success: true, ...FK.runtime });
+          break;
+
         case 'getQuestions':
           await this.handleGetQuestions(sendResponse);
           break;

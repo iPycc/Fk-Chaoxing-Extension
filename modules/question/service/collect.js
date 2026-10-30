@@ -3,6 +3,7 @@ const QuestionCollector = {
   extractors: [ExamExtractor, HomeworkExtractor],
   snapshot: null,
   live: [],
+  pending: null,
   token: Math.random().toString(36).slice(2),
 
   getExtractor(doc = document) {
@@ -63,6 +64,12 @@ const QuestionCollector = {
   },
 
   async collectStable({ parser, maxMs } = {}) {
+    if (this.pending) return this.pending;
+    this.pending = this.runStable({ parser, maxMs }).finally(() => { this.pending = null; });
+    return this.pending;
+  },
+
+  async runStable({ parser, maxMs } = {}) {
     parser ||= typeof AIAnswerCore !== 'undefined'
       ? (container, doc, header) => AIAnswerCore.parseQuestionContainer(container, doc, header) : null;
     if (typeof CopyEnabler !== 'undefined') await CopyEnabler.ready().catch(() => {});
