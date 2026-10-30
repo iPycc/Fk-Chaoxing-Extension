@@ -1,0 +1,76 @@
+/* Learning-page dialogue controls. */
+.chat-container .input-toolbar__actions.cx-dialogue-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cx-dialogue-generate {
+  appearance: none;
+  border: 1px solid #347b69;
+  border-radius: 4px;
+  background: #eaf5f0;
+  color: #17634f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.cx-dialogue-generate:hover {
+  background: #d7eee5;
+}
+
+.cx-dialogue-generate:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.cx-dialogue-generate:focus-visible {
+  outline: 2px solid #17634f;
+  outline-offset: 2px;
+}
+
+.cx-dialogue-generate--busy {
+  border-color: #ab6540;
+  background: #fff3e9;
+  color: #914a25;
+}
+
+.cx-dialogue-effort {
+  border: 1px solid #b9c6c1;
+  border-radius: 4px;
+  background: #fff;
+  color: #243b35;
+  font: inherit;
+  font-size: 13px;
+  height: 30px;
+  max-width: 110px;
+  padding: 2px 6px;
+}
+
+.cx-dialogue-effort:focus-visible {
+  outline: 2px solid #17634f;
+  outline-offset: 2px;
+}
+
+.cx-dialogue-status {
+  color: #52616b;
+  font-size: 12px;
+  line-height: 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cx-dialogue-status[data-type="error"] {
+  color: #b13c38;
+}
+
+.cx-dialogue-generating .send-button {
+  opacity: 0.5;
+  pointer-events: none;
+}
