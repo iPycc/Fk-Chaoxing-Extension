@@ -10,6 +10,13 @@ const QuestionFrame = {
   owners: new Map(),
   replies: new Map(),
   inbound: new Map(),
+  frameScopes: new WeakMap(),
+  nextFrameScope: 0,
+
+  scope(frame) {
+    if (!this.frameScopes.has(frame)) this.frameScopes.set(frame, `${this.bridgeId}:frame${++this.nextFrameScope}`);
+    return this.frameScopes.get(frame);
+  },
 
   allowed(origin) {
     try { const host = new URL(origin).hostname.toLowerCase(); return host === 'chaoxing.com' || host.endsWith('.chaoxing.com'); }
@@ -27,6 +34,7 @@ const QuestionFrame = {
     const origin = this.origin(frame);
     if (!origin) return Promise.resolve({ sections: [], pending: 0 });
     if (!frame.contentWindow) return Promise.resolve({ sections: [], pending: 1 });
+    const scope = this.scope(frame);
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     return new Promise(resolve => {
       let done = false;
@@ -42,9 +50,11 @@ const QuestionFrame = {
         if (event.source !== frame.contentWindow || event.origin !== origin || data?.type !== this.resultType ||
             data.requestId !== requestId || data.token !== token) return;
         const sections = (Array.isArray(data.sections) ? data.sections : []).map(section => ({ ...section,
-          questions: (section.questions || []).map(question => {
+          questions: (section.questions || []).map((question, index) => {
             if (question.remote) this.owners.set(question.remote, { source: event.source, origin: event.origin });
-            return { ...question, frameRemote: true };
+            // A child cannot discover its full cross-origin frame path. Local
+            // question IDs therefore need the receiving iframe's identity too.
+            return { ...question, questionKey: `${scope}/${question.questionKey || question.id || `item${index}`}`, frameRemote: true };
           }) }));
         finish({ sections, pending: data.pendingFrames || 0,
           loadingFrames: data.loadingFrames || 0, encryptedNodes: data.encryptedNodes || 0,
@@ -81,7 +91,8 @@ const QuestionFrame = {
     const updated = AIAnswerCore.parseQuestionContainer(question.container, question.docRef, question.sectionHeader);
     if (updated) Object.assign(question, updated);
     return { ...result,
-      question: { ...QuestionSnapshot.question(question), index: snap.index, remote: data.remote },
+      question: { ...QuestionSnapshot.question(question), questionKey: snap.questionKey,
+        index: snap.index, remote: data.remote },
       editorState: this.editorState(question) };
   },
 
