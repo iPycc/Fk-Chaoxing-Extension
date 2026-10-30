@@ -554,7 +554,6 @@ class PopupController {
       }
       await chrome.action.setBadgeText({ text: String(result.count), tabId: this.currentTab.id });
       this.log('success', `共获取 ${result.count} 道题目`);
-      await chrome.tabs.sendMessage(this.currentTab.id, { action: 'showQuestionModal', content: result.content }, { frameId: 0 });
     } catch (err) {
       this.log('error', `获取题目失败：${err.message}`);
     } finally {

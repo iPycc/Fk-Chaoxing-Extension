@@ -1,4 +1,4 @@
-// Exam-page parser.
+// ExamExtractor - Extracts questions from exam pages
 const ExamExtractor = {
   // Check if current page is supported
   canHandle(url) {
@@ -34,18 +34,39 @@ const ExamExtractor = {
   // Main extraction method
   extract(doc = document) {
     const questions = [];
-    
+
     // Find all question containers
-    const containers = QuestionContainers.find(doc);
+    const containers = doc.querySelectorAll(
+      '.singleQuesId[id^="sigleQuestionDiv_"], .singleQuesId[id^="question"], .singleQuesId[typename]'
+    );
+
     containers.forEach(container => {
       const question = this.parseExamQuestion(container);
       if (question) questions.push(question);
     });
+
     return questions;
   },
 
+  // Parse a single exam question
   parseExamQuestion(container) {
-    return HomeworkExtractor.parseModernQuestion(container);
+    // Extract title
+    const titleEl = container.querySelector('h3.mark_name.colorDeep');
+    const stem = this.extractTitle(titleEl);
+    const typeLabel = this.getTypeLabel(container);
+    const title = this.normalizeText(`${typeLabel} ${stem}`);
+
+    const dropdown = DropdownQuestions.extract(container);
+    if (dropdown) return { title, ...dropdown };
+
+    // Extract options
+    const options = this.extractOptions(container);
+
+    // Determine question type based on number of options
+    const type = options.length === 0 ? 'other' :
+                 options.length <= 4 ? 'single' : 'multi';
+
+    return { title, options, type };
   },
 
   // Extract exam question title
@@ -60,12 +81,12 @@ const ExamExtractor = {
       .replace(/^\d+\.\s*/, '')
       .replace(/^\((?:单选题|多选题|判断题|填空题|简答题|排序题|连线题)\)\s*/, '');
   },
-  
+
   // Extract exam question options
   extractOptions(container) {
     const options = [];
     const optionEls = container.querySelectorAll('.stem_answer .answerBg');
-    
+
     optionEls.forEach((el, idx) => {
       const letter = this.getOptionLetter(idx);
       const content = this.normalizeText(el.querySelector('.answer_p')?.textContent || el.textContent || '');
@@ -73,7 +94,7 @@ const ExamExtractor = {
         options.push(`${letter}. ${content}`);
       }
     });
-    
+
     return this.sortOptions(options);
   }
 };

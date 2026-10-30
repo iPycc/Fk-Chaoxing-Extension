@@ -60,15 +60,10 @@ const ChaoxingHelper = {
       const isHomeworkWorkPage = url.includes('/mooc-ans/mooc2/work/dowork') || url.includes('/work/dowork');
       
       if (!(isExam || isHomeworkOrChapter || isHomeworkWorkPage)) return;
-      const result = await QuestionCollector.collectStable();
-      if (result.status !== 'stable') {
-        chrome.runtime.sendMessage({ action: 'updateBadge', count: 0 });
-        GlobalLogger.warning(QuestionReport.message(result.diagnostics));
-        return;
-      }
-      const count = result.snapshot.items.length;
-      GlobalLogger.success(`自动提取完成，共 ${count} 道题目`);
-      chrome.runtime.sendMessage({ action: 'updateBadge', count, snapshotId: result.snapshot.id });
+      const result = await QuestionCollector.collectForExtraction();
+      if (!result.count) return;
+      GlobalLogger.success(`自动提取完成，共 ${result.count} 道题目`);
+      chrome.runtime.sendMessage({ action: 'updateBadge', count: result.count });
     } catch (err) {
       console.error('[Fk-Chaoxing] 自动提取失败', err);
     }

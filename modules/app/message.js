@@ -63,25 +63,16 @@ const ContentMessageHandler = {
   // 处理获取题目请求
   async handleGetQuestions(sendResponse) {
     try {
-      const result = await QuestionCollector.collectStable();
-      const totalQuestions = result.snapshot.items.length;
-      if (result.status !== 'stable') {
-        sendResponse({ success: false, status: result.status, count: totalQuestions,
-          snapshotId: result.snapshot.id, diagnostics: result.diagnostics,
-          message: QuestionReport.message(result.diagnostics) });
+      const result = await QuestionCollector.collectForExtraction();
+      if (!result.count) {
+        sendResponse({ success: false, message: '未找到题目，请等待页面加载完成后重试' });
         return;
       }
-      const content = QuestionCollector.formatSections(result.sections);
-      GlobalLogger.success(`共获取 ${totalQuestions} 道题目`);
-
-      sendResponse({
-        success: true,
-        status: result.status,
-        count: totalQuestions,
-        content,
-        snapshotId: result.snapshot.id,
-        diagnostics: result.diagnostics
-      });
+      // Show the result in the page before replying, so a closed popup cannot
+      // discard the result between collection and a second display request.
+      CXModal.show(result.content);
+      GlobalLogger.success(`共获取 ${result.count} 道题目`);
+      sendResponse({ success: true, status: 'stable', count: result.count, content: result.content });
     } catch (err) {
       if (window.self === window.top) {
         GlobalLogger.error('获取题目失败', err.message);
@@ -177,10 +168,8 @@ const ContentMessageHandler = {
   // 处理获取题目数量请求
   async handleGetQuestionCount(sendResponse) {
     try {
-      const result = await QuestionCollector.collectStable();
-      sendResponse({ success: result.status === 'stable', status: result.status,
-        count: result.snapshot.items.length, snapshotId: result.snapshot.id,
-        diagnostics: result.diagnostics, message: QuestionReport.message(result.diagnostics) });
+      const result = await QuestionCollector.collectForExtraction();
+      sendResponse({ success: result.count > 0, count: result.count });
     } catch (err) {
       sendResponse({
         success: false,
