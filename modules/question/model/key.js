@@ -21,9 +21,12 @@ const QuestionKey = {
   from(question = {}, context = {}) {
     if (question.questionKey) return question.questionKey;
     const container = question.container;
+    const owner = container?.closest?.('.singleQuesId');
+    // Legacy .TiMu[data] stores the question TYPE (e.g. 4 = short answer),
+    // not a question ID. Its enclosing singleQuesId owns the actual identity.
     const platformId = question.subquestionId || question.itemId ||
-      container?.getAttribute?.('itemid') || container?.getAttribute?.('data') ||
-      container?.getAttribute?.('qid') || container?.id || '';
+      container?.getAttribute?.('itemid') || container?.getAttribute?.('qid') ||
+      owner?.getAttribute?.('data') || owner?.id || container?.id || '';
     const frame = context.framePath || this.framePath(question.docRef || context.doc || document);
     if (platformId) return `${frame}:${platformId}`;
     const source = [frame, context.header || question.sectionHeader || '', question.parentTitle || '',
