@@ -4,6 +4,7 @@ const AIChat = {
   lastUsage: null, contextError: null, currentConfig: null, contextInfo: null, infoPort: null, infoRevision: 0,
   quickEffort: null, historyKey: '', opening: null, launcher: null,
   snapshotId: '',
+  autoApply: true,
   pageKey() { return `aiChat:${location.origin}${location.pathname}${location.search}`; },
   el(id) { return this.root?.getElementById(id); },
   clampPosition() {
@@ -117,6 +118,7 @@ const AIChat = {
       <div id="references"></div><div id="session-references"></div>
       <p id="usage-summary">上下文：—</p>
       <p id="context-warning" role="status" hidden></p><textarea id="input" rows="3" placeholder="留空可直接生成并填写答案；讨论中确认的答案可直接填入…"></textarea>
+      <label class="write-option"><input type="checkbox" id="auto-apply" checked>自动写入</label>
       <div class="actions"><button id="clear-context" title="清除本页对话记录，保留题目引用" disabled>清空上下文</button><button id="preview">预览</button><button id="regenerate" title="重新执行上一轮操作">重新生成</button><button id="stop" hidden>停止</button><button id="fill" disabled>填入答案</button><button id="send">生成答案</button></div><div id="status" role="status" hidden></div></main></div>`;
     this.root.append(panel);
     this.el('minimize').onclick = () => {
@@ -157,6 +159,11 @@ const AIChat = {
     this.el('target').onchange = () => this.updateContextSummary();
     this.el('send').onclick = () => this.send();
     this.el('fill').onclick = () => this.applyCached();
+    this.el('auto-apply').onchange = async event => {
+      this.autoApply = event.target.checked;
+      await chrome.storage.local.set({ autoApplyAnswers: this.autoApply });
+      this.updateActions();
+    };
     this.el('input').oninput = () => this.updateActions();
     this.el('input').onkeydown = event => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
@@ -188,6 +195,11 @@ const AIChat = {
     };
     chrome.storage.onChanged.addListener(async (changes, area) => {
       if (area !== 'local' || !this.root) return;
+      if (changes.autoApplyAnswers) {
+        this.autoApply = changes.autoApplyAnswers.newValue !== false;
+        this.el('auto-apply').checked = this.autoApply;
+        this.updateActions();
+      }
       if (changes.activeAiProfileId || changes.aiProfiles) {
         if (changes.aiProfiles) { this.lastUsage = null; this.contextError = null; await this.persist(); }
         await this.loadModels();
@@ -196,6 +208,9 @@ const AIChat = {
   },
   async refresh() {
     if (this.pending) return;
+    const stored = await chrome.storage.local.get('autoApplyAnswers');
+    this.autoApply = stored.autoApplyAnswers !== false;
+    this.el('auto-apply').checked = this.autoApply;
     const selectedKeys = new Set(this.chosen().map(q => this.questionKey(q)));
     const config = await AIApi.loadConfig();
     this.el('effort').value = this.quickEffort ?? config.reasoningEffort;
@@ -550,7 +565,8 @@ const AIChat = {
     const batches = this.batchRequests(request, settings.batchSize);
     const job = { controller: new AbortController(), completed: 0, failures: [], failedQuestions: new Set(),
       unansweredQuestions: new Set(), offered: 0, written: 0, maxInputTokens: null,
-      timeouts: settings, timeoutSeconds: settings.idleTimeoutSeconds, applyQueue: Promise.resolve() };
+      timeouts: settings, timeoutSeconds: settings.idleTimeoutSeconds, applyQueue: Promise.resolve(),
+      autoApply: this.autoApply };
     this.lastUsage = null;
     this.pending = job;
     this.setBusy(true);
@@ -594,6 +610,7 @@ const AIChat = {
                 this.cacheAnswers(done.entries, batch);
                 job.offered += done.entries.length;
               } else {
+                if (!job.autoApply) this.cacheAnswers(done.entries, batch);
                 const offer = job.applyQueue.then(() => {
                   job.controller.signal.throwIfAborted();
                   return this.offerAnswers(done.entries, batch, job);
@@ -857,7 +874,7 @@ const AIChat = {
       };
       card.append(code, apply); this.el('feed').append(card);
       job.offered++;
-      await apply.onclick();
+      if (job.autoApply !== false) await apply.onclick();
     }
   },
   task(message, type = 'info') {
@@ -915,7 +932,8 @@ const AIChat = {
     this.el('send').disabled = Boolean(this.pending) || (chatting ? !input && !selected.length : !hasTarget);
     this.el('input').placeholder = this.isDiscussion()
       ? '输入内容继续讨论；也可勾选新题后发送资料。确定答案后点击“填入答案”。'
-      : '留空可直接生成并填写答案；发送内容后进入讨论模式…';
+      : this.autoApply ? '留空可直接生成并填写答案；发送内容后进入讨论模式…'
+      : '留空可生成答案；确认后点击“填入答案”…';
     this.el('fill').disabled = Boolean(this.pending) || AIAnswerCache.count(this.snapshotId) === 0;
     this.el('regenerate').disabled = Boolean(this.pending) || !this.history.some(item => item.role === 'user' && item.request && !item.request.localOnly);
     this.el('clear-context').disabled = Boolean(this.pending) || (!this.history.length && !this.contextQuestions.length && !this.isDiscussion());
@@ -924,6 +942,7 @@ const AIChat = {
   setBusy(value) {
     this.updateActions();
     this.el('refresh').disabled = value;
+    this.el('auto-apply').disabled = value;
     this.el('stop').hidden = !value;
   },
   async applyRemote(q, snap, answer, { signal, timeoutSeconds } = {}) {
