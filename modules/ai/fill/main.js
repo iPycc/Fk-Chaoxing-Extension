@@ -597,9 +597,13 @@ const AIAnswerCore = {
     const error = DropdownQuestions.validateAnswer(question, answer);
     if (error) throw new Error(error);
     const container = question.container;
-    const qid = container?.getAttribute('data') || container?.id?.match(/(\d+)$/)?.[1];
+    const owner = container?.closest('.singleQuesId') || container;
+    // TiMu[data="11"] identifies a matching question's TYPE, not its ID.
+    const qid = owner?.id?.match(/(\d+)$/)?.[1] ||
+      (owner?.classList.contains('singleQuesId') ? owner.getAttribute('data') : null) ||
+      container?.getAttribute('qid');
     if (!container?.isConnected || !qid) throw new Error('题目控件已失效，请重新提取题目');
-    const hidden = Array.from(container.querySelectorAll('input[type="hidden"]'))
+    const hidden = Array.from(owner.querySelectorAll('input[type="hidden"]'))
       .find(input => input.id === `answer${qid}` || input.name === `answer${qid}`);
     if (!hidden) throw new Error('未找到题目的隐藏答案字段');
 
@@ -703,7 +707,7 @@ const AIAnswerCore = {
     }
     hidden.value = JSON.stringify(choices.map(choice => ({ name: choice.name, content: choice.option.value }))
       .sort((a, b) => Number(a.name) - Number(b.name)));
-    const typeInput = question.container.querySelector(`#answertype${qid}`);
+    const typeInput = (question.container.closest('.singleQuesId') || question.container).querySelector(`#answertype${qid}`);
     if (typeInput) typeInput.value = '11';
     this.dispatchChoiceEvents(hidden);
     return true;
