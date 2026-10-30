@@ -116,7 +116,7 @@
           <div class="setting-field">
             <label for="ai-batch-size">每次请求题目数</label>
             <input id="ai-batch-size" class="form-control" type="number" min="1" max="100" step="1" inputmode="numeric">
-            <p>生成与提取答案按此上限分批；讨论每轮使用一个完整请求，保持上下文连贯。</p>
+            <p>生成与讨论都按此上限分批。</p>
           </div>
           <div class="setting-field">
             <label for="ai-concurrency">同时并发数</label>
@@ -129,9 +129,16 @@
             <p>网络或答案格式错误时重试当前批次；0 表示不重试。</p>
           </div>
           <div class="setting-field">
-            <label for="ai-timeout-seconds">请求超时（秒）</label>
-            <input id="ai-timeout-seconds" class="form-control" type="number" min="1" step="1" inputmode="numeric">
-            <p>默认 300 秒，包含图片读取、模型思考和输出的总时长，对所有模型生效。</p>
+            <label for="ai-first-timeout">首次响应（秒）</label>
+            <input id="ai-first-timeout" class="form-control" type="number" min="60" max="3600" step="1" inputmode="numeric">
+          </div>
+          <div class="setting-field">
+            <label for="ai-idle-timeout">流空闲（秒）</label>
+            <input id="ai-idle-timeout" class="form-control" type="number" min="30" max="1800" step="1" inputmode="numeric">
+          </div>
+          <div class="setting-field">
+            <label for="ai-max-timeout">最长时间（秒）</label>
+            <input id="ai-max-timeout" class="form-control" type="number" min="60" max="7200" step="1" inputmode="numeric">
           </div>
           <p id="batch-settings-error" class="field-error" role="alert" hidden></p>
           <button id="btn-batch-save" class="btn btn-primary" type="button">保存答题设置</button>
@@ -251,7 +258,7 @@
         <div class="form-group">
           <label for="ai-chat-prompt">对话提示词</label>
           <textarea id="ai-chat-prompt" class="form-control" rows="4"></textarea>
-          <p class="settings-caption">发送讨论消息时使用的独立系统提示词。本轮输入作为用户消息发送；“填入答案”使用内部提取规则，只整理已确定的答案。</p>
+          <p class="settings-caption">发送讨论消息时使用；同一次响应会携带经过本地校验的结构化答案。</p>
         </div>
         <div class="inline-row">
           <button id="btn-prompt-reset" class="btn btn-outline" type="button">恢复默认提示词</button>
@@ -269,7 +276,9 @@
     </section>
   </div>
 
-  <script src="modules/ai-answer/config.js"></script>
+  <script src="modules/app/ns.js"></script>
+  <script src="modules/ai/config/profile.js"></script>
+  <script src="modules/ai/config/batch.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

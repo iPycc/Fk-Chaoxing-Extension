@@ -41,7 +41,7 @@ const GlobalLogger = {
   // 内部添加日志并处理同步
   addLogEntry(logEntry, shouldBroadcast) {
     // 1. 存入本地数组（顶层窗口存储所有，iframe 仅存储自己的）
-    // 其实 iframe 不需要存储，只要发给顶层即可。但为了 content-message-handler 能在 iframe 中工作（虽然我们禁用了），保留一份也无妨。
+    // Child-frame logs are retained locally; popup requests are handled by the top frame.
     // 为了节省内存，iframe 可以不存，或者存少点。这里统一存。
     this.logs.push(logEntry);
     if (this.logs.length > this.maxLogs) {

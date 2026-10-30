@@ -1,8 +1,11 @@
-importScripts('modules/ai-answer/config.js');
-importScripts('modules/ai-answer/protocol.js');
-importScripts('modules/ai-answer/images.js');
-importScripts('modules/ai-answer/model-query.js');
-importScripts('modules/ai-answer/stream.js');
+importScripts('modules/app/ns.js');
+importScripts('modules/ai/config/profile.js');
+importScripts('modules/ai/config/batch.js');
+importScripts('modules/ai/net/protocol.js');
+importScripts('modules/ai/net/image.js');
+importScripts('modules/ai/net/model.js');
+importScripts('modules/ai/net/stream.js');
+importScripts('modules/ai/net/timeout.js');
 
 // Background Service Worker - 处理 API 请求和后台任务
 
@@ -99,7 +102,8 @@ chrome.runtime.onConnect.addListener(port => {
       if (!finished) port.postMessage({ type: 'delta', delta });
     }, port.name === 'AI_CHAT_STREAM' ? (delta, metadata) => {
       if (!finished) port.postMessage({ type: 'thought', delta, ...metadata });
-    } : undefined, port.name === 'AI_CHAT_STREAM' ? message.profileId : undefined, message.timeoutSeconds, message.config)
+    } : undefined, port.name === 'AI_CHAT_STREAM' ? message.profileId : undefined,
+      message.timeouts || { timeoutSeconds: message.timeoutSeconds }, message.config)
       .then(result => complete({ type: 'done', ...result }))
       .catch(error => {
         if (!finished) complete({ type: 'error', message: error.message, retryable: error.retryable === true, contextLimit: error.contextLimit === true });
@@ -112,7 +116,7 @@ chrome.runtime.onConnect.addListener(port => {
   });
 });
 
-async function streamDialogueReply(messages, reasoningEffort, controller, onDelta, onThought, profileId, timeoutSeconds, requestConfig) {
+async function streamDialogueReply(messages, reasoningEffort, controller, onDelta, onThought, profileId, timeoutSettings, requestConfig) {
   if (!Array.isArray(messages) || !messages.length ||
       messages.some(item => !['system', 'user', 'assistant'].includes(item?.role) || !validMessageContent(item))) {
     throw new Error('对话内容无效');
@@ -134,13 +138,9 @@ async function streamDialogueReply(messages, reasoningEffort, controller, onDelt
     throw new Error('尚未授权模型 API 域名，请在插件弹窗重新保存或切换模型以授权');
   }
 
-  timeoutSeconds = AIConfig.normalizeTimeoutSeconds(timeoutSeconds ?? (await AIConfig.loadBatchSettings()).timeoutSeconds);
+  const settings = AIBatchConfig.normalize({ ...(await AIConfig.loadBatchSettings()), ...(timeoutSettings || {}) });
   controller.signal.throwIfAborted();
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutSeconds * 1000);
+  const timeout = AIRequestTimeout.start(controller, settings);
   let preparedMessages;
   try {
     const maxOutputTokens = await AIModelQuery.prepare(config, controller.signal);
@@ -155,17 +155,18 @@ async function streamDialogueReply(messages, reasoningEffort, controller, onDelt
     if (!response.ok) {
       throw await apiResponseError(response);
     }
+    timeout.activity();
     const result = response.headers?.get('content-type')?.includes('application/json')
       ? AIStream.parseResponse(await readJsonResponse(response), config.apiType, onDelta, onThought)
-      : await AIStream.consumeResult(response.body, config.apiType, onDelta, onThought);
+      : await AIStream.consumeResult(response.body, config.apiType, onDelta, onThought, () => timeout.activity());
     return responseDetails(config, result);
   } catch (err) {
-    if (timedOut) throw retryableError(`AI API 请求超时（${timeoutSeconds} 秒）`);
+    if (timeout.kind) throw timeout.error();
     if (err instanceof TypeError) err.retryable = true;
     throw err;
   } finally {
     preparedMessages = null;
-    clearTimeout(timeout);
+    timeout.stop();
   }
 }
 
@@ -198,13 +199,10 @@ async function callAIAPI(data) {
     throw new Error('请先配置模型 ID');
   }
 
-  const timeoutSeconds = AIConfig.normalizeTimeoutSeconds(data.timeoutSeconds ?? (await AIConfig.loadBatchSettings()).timeoutSeconds);
+  const settings = AIBatchConfig.normalize({ ...(await AIConfig.loadBatchSettings()),
+    ...(data.timeouts || {}), ...(data.timeoutSeconds === undefined ? {} : { timeoutSeconds: data.timeoutSeconds }) });
   const controller = new AbortController();
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutSeconds * 1000);
+  const timeout = AIRequestTimeout.start(controller, settings);
   let response;
   let preparedMessages;
   try {
@@ -221,15 +219,15 @@ async function callAIAPI(data) {
     if (!response.ok) {
       throw await apiResponseError(response);
     }
-
+    timeout.activity();
     return responseDetails(config, AIStream.parseResponse(await readJsonResponse(response), config.apiType));
   } catch (err) {
-    if (timedOut) throw retryableError(`AI API 请求超时（${timeoutSeconds} 秒）`);
+    if (timeout.kind) throw timeout.error();
     if (err instanceof TypeError) err.retryable = true;
     throw err;
   } finally {
     preparedMessages = null;
-    clearTimeout(timeout);
+    timeout.stop();
   }
 }
 
@@ -276,15 +274,14 @@ function buildRequestBody(config, messages, stream = false, maxOutputTokens) {
 async function queryModelList(requestConfig, controller, infoOnly = false) {
   const config = normalizeApiConfig(requestConfig);
   if (!config.baseUrl || !config.apiKey) throw new Error('请填写 API 地址和密钥');
-  const { timeoutSeconds } = await AIConfig.loadBatchSettings();
+  const settings = await AIConfig.loadBatchSettings();
   controller.signal.throwIfAborted();
-  let timedOut = false;
-  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutSeconds * 1000);
+  const timeout = AIRequestTimeout.start(controller, settings);
   try { return await (infoOnly ? AIModelQuery.inputInfo(config, controller.signal) : AIModelQuery.list(config, controller.signal)); }
   catch (error) {
-    if (timedOut) throw new Error(`模型查询超时（${timeoutSeconds} 秒）`);
+    if (timeout.kind) throw timeout.error();
     throw error;
-  } finally { clearTimeout(timeout); }
+  } finally { timeout.stop(); }
 }
 
 async function queryModelInfo(requestConfig, controller) {

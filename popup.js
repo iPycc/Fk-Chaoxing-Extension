@@ -41,6 +41,8 @@ class PopupController {
   }
 
   async init() {
+    const version = document.querySelector('.plugin-title .version');
+    if (version) version.textContent = `v${chrome.runtime.getManifest().version}`;
     this.bindEvents();
     await Promise.all([this.loadPluginState(), this.loadBatchSettings()]);
     const draft = await this.loadAiProfiles();
@@ -168,7 +170,9 @@ class PopupController {
     document.getElementById('ai-batch-size').value = settings.batchSize;
     document.getElementById('ai-concurrency').value = settings.concurrency;
     document.getElementById('ai-max-retries').value = settings.maxRetries;
-    document.getElementById('ai-timeout-seconds').value = settings.timeoutSeconds;
+    document.getElementById('ai-first-timeout').value = settings.firstByteTimeoutSeconds;
+    document.getElementById('ai-idle-timeout').value = settings.idleTimeoutSeconds;
+    document.getElementById('ai-max-timeout').value = settings.maxRequestSeconds;
   }
 
   async saveBatchSettings() {
@@ -179,7 +183,9 @@ class PopupController {
         batchSize: document.getElementById('ai-batch-size').value,
         concurrency: document.getElementById('ai-concurrency').value,
         maxRetries: document.getElementById('ai-max-retries').value,
-        timeoutSeconds: document.getElementById('ai-timeout-seconds').value
+        firstByteTimeoutSeconds: document.getElementById('ai-first-timeout').value,
+        idleTimeoutSeconds: document.getElementById('ai-idle-timeout').value,
+        maxRequestSeconds: document.getElementById('ai-max-timeout').value
       });
       await chrome.storage.local.set({ aiBatchSettings: settings });
       this.log('success', '答题设置已保存');
@@ -518,11 +524,11 @@ class PopupController {
     if (!this.isEnabled || !this.currentTab) return;
     this.btnExtractAuto.disabled = true;
     try {
-      const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' });
+      const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestions' }, { frameId: 0 });
       if (!result?.success) throw new Error(result?.message || '获取题目失败');
       await chrome.action.setBadgeText({ text: String(result.count), tabId: this.currentTab.id });
       this.log('success', `共获取 ${result.count} 道题目`);
-      await chrome.tabs.sendMessage(this.currentTab.id, { action: 'showQuestionModal', content: result.content });
+      await chrome.tabs.sendMessage(this.currentTab.id, { action: 'showQuestionModal', content: result.content }, { frameId: 0 });
     } catch (err) {
       this.log('error', `获取题目失败：${err.message}`);
     } finally {
@@ -561,7 +567,7 @@ class PopupController {
   async updateQuestionCount() {
     if (!this.currentTab) return;
     try {
-      const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestionCount' });
+      const result = await chrome.tabs.sendMessage(this.currentTab.id, { action: 'getQuestionCount' }, { frameId: 0 });
       if (result?.success && result.count > 0) {
         await chrome.action.setBadgeText({ text: String(result.count), tabId: this.currentTab.id });
         await chrome.action.setBadgeBackgroundColor({ color: '#f53f3f', tabId: this.currentTab.id });
@@ -610,7 +616,7 @@ class PopupController {
     on('btn-batch-save', 'click', () => this.saveBatchSettings());
     on('btn-image-site-authorize', 'click', () => this.authorizeImageSite());
     on('ai-image-site', 'input', () => { document.getElementById('image-site-status').hidden = true; });
-    ['ai-batch-size', 'ai-concurrency', 'ai-max-retries', 'ai-timeout-seconds'].forEach(id => {
+    ['ai-batch-size', 'ai-concurrency', 'ai-max-retries', 'ai-first-timeout', 'ai-idle-timeout', 'ai-max-timeout'].forEach(id => {
       on(id, 'input', () => { document.getElementById('batch-settings-error').hidden = true; });
     });
     on('btn-ai-config-save', 'click', () => this.saveAiProfile());
@@ -642,9 +648,9 @@ class PopupController {
     on('btn-prompt-preview', 'click', () => {
       const preview = document.getElementById('prompt-preview');
       const config = { answerPrompt: this.aiAnswerPrompt.value, chatPrompt: this.aiChatPrompt.value };
-      preview.textContent = ['answer', 'chat', 'extract'].map(mode => {
-        const label = { answer: '作答：生成答案', chat: '讨论：发送', extract: '提取：填入答案' }[mode];
-        const context = mode === 'extract' ? '[讨论记录与当前作答目标]' : '[所选题目与答题区现有内容]';
+      preview.textContent = ['answer', 'chat'].map(mode => {
+        const label = { answer: '作答：生成答案', chat: '讨论：发送' }[mode];
+        const context = '[所选题目与答题区现有内容]';
         return `${label}\nSystem: ${AIConfig.buildSystemPrompt(config, mode)}\n\nUser: ${context}${mode === 'chat' ? '\n[本轮输入]' : ''}`;
       }).join('\n\n────────\n\n');
       preview.hidden = false;
