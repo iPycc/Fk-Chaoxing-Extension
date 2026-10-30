@@ -74,7 +74,7 @@ const HomeworkExtractor = {
   },
 
   // Main extraction method
-  extract(doc = document) {
+  extract(doc = document, withContainers = false) {
     const questions = [];
 
     // Helper to find title
@@ -99,7 +99,8 @@ const HomeworkExtractor = {
           return `${String.fromCharCode(65 + idx)}. ${text}`;
         }).filter(Boolean);
 
-        questions.push({ title, options: this.sortOptions(options), type: this.detectType(box, options) });
+        questions.push({ title, options: this.sortOptions(options), type: this.detectType(box, options),
+          ...(withContainers ? { container: box, docRef: doc } : {}) });
       });
     }
 
@@ -108,7 +109,7 @@ const HomeworkExtractor = {
     ));
     modernContainers.forEach(container => {
       const question = this.parseModernQuestion(container);
-      if (question) questions.push(question);
+      if (question) questions.push(withContainers ? { ...question, container, docRef: doc } : question);
     });
 
     // Fallback if no containers found

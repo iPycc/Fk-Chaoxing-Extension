@@ -197,15 +197,21 @@ const AIChat = {
   async refresh() {
     if (this.pending) return;
     const selectedKeys = new Set(this.chosen().map(q => this.questionKey(q)));
-    await this.scanQuestions();
-    if (this.isDiscussion()) {
-      this.el('all').checked = false;
-      this.selected = new Set(this.questions.flatMap((q, index) => selectedKeys.has(this.questionKey(q)) ? [index] : []));
-    } else this.selected = new Set(this.questions.map((_, index) => index));
-    this.renderQuestions();
     const config = await AIApi.loadConfig();
     this.el('effort').value = this.quickEffort ?? config.reasoningEffort;
     await this.loadModels();
+    try {
+      await this.scanQuestions();
+      if (this.isDiscussion()) {
+        this.el('all').checked = false;
+        this.selected = new Set(this.questions.flatMap((q, index) => selectedKeys.has(this.questionKey(q)) ? [index] : []));
+      } else this.selected = new Set(this.questions.map((_, index) => index));
+      this.renderQuestions();
+    } catch (error) {
+      this.questions = []; this.selected.clear();
+      this.renderQuestions();
+      this.task(`提取题目失败：${error.message}`, 'error');
+    }
   },
   async scanQuestions() {
     const result = await QuestionCollector.collectLive();

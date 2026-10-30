@@ -32,7 +32,7 @@ const ExamExtractor = {
   },
 
   // Main extraction method
-  extract(doc = document) {
+  extract(doc = document, withContainers = false) {
     const questions = [];
 
     // Find all question containers
@@ -42,7 +42,7 @@ const ExamExtractor = {
 
     containers.forEach(container => {
       const question = this.parseExamQuestion(container);
-      if (question) questions.push(question);
+      if (question) questions.push(withContainers ? { ...question, container, docRef: doc } : question);
     });
 
     return questions;

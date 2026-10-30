@@ -170,9 +170,17 @@ const QuestionCollector = {
 
   local(doc, parser) {
     const header = this.findHeaderTitle(doc) || doc.title || '';
-    const questions = parser
-      ? QuestionContainers.find(doc).map(container => parser(container, doc, header)).filter(Boolean)
-      : this.getExtractor(doc).extract(doc);
+    const extractor = this.getExtractor(doc);
+    const questions = parser ? extractor.extract(doc, true).map(question => {
+      if (question.container) {
+        const live = parser(question.container, doc, header);
+        if (live) return live;
+      }
+      // Title-only fallback questions can be referenced, but have no writable controls.
+      return { ...question, sectionHeader: header,
+        id: QuestionKey.from(question, { doc, header }),
+        fillTargets: [], shortAnswerTargets: [], choiceTargets: [], blankCount: 0, existingAnswer: [] };
+    }) : extractor.extract(doc);
     return questions.length ? [{ header, questions }] : [];
   },
 
@@ -235,7 +243,16 @@ const QuestionCollector = {
   },
 
   async collectLive() {
-    return this.collectStable();
+    if (typeof CopyEnabler !== 'undefined') await CopyEnabler.ready();
+    const parser = (container, doc, header) => AIAnswerCore.parseQuestionContainer(container, doc, header);
+    const result = await this.collectOnce(document, { parser });
+    const live = result.sections.flatMap(section => section.questions);
+    result.status = live.length && !result.pendingFrames && !result.incompleteQuestions ? 'stable' : 'partial';
+    if (!live.length) result.status = 'empty';
+    result.snapshot = QuestionSnapshot.create(live, { status: result.status });
+    result.diagnostics = QuestionReport.create(result);
+    if (result.status === 'stable') { this.snapshot = result.snapshot; this.live = live; }
+    return result;
   },
 
   async collectAll() {
