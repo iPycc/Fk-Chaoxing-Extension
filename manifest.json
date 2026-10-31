@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fk-Chaoxing",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "解除复制粘贴限制、自动提取题目并支持 AI 一键答题，专为超星学习通优化",
   "permissions": [
     "clipboardWrite",
@@ -29,29 +29,51 @@
       ],
       "js": [
         "assets/TyprMd5.js",
+        "modules/app/ns.js",
         "modules/logger.js",
         "modules/ui/Toast.js",
         "modules/ui/Modal.js",
-        "modules/extractors/DropdownQuestions.js",
-        "modules/extractors/QuestionContainers.js",
-        "modules/extractors/HomeworkExtractor.js",
-        "modules/extractors/ExamExtractor.js",
-        "modules/services/QuestionCollector.js",
+        "modules/question/parse/dropdown.js",
+        "modules/question/parse/locate.js",
+        "modules/question/parse/homework.js",
+        "modules/question/parse/exam.js",
+        "modules/question/model/key.js",
+        "modules/question/model/snapshot.js",
+        "modules/question/scan/tree.js",
+        "modules/question/scan/frame.js",
+        "modules/question/scan/stable.js",
+        "modules/question/service/report.js",
+        "modules/question/service/collect.js",
         "modules/PasteEnabler.js",
         "modules/CopyEnabler.js",
         "modules/UEditorUnlock.js",
-        "modules/ai-answer/config.js",
-        "modules/ai-answer/api.js",
-        "modules/ai-answer/ui.js",
-        "modules/ai-answer/core.js",
-        "modules/ai-answer/chat.js",
-        "modules/ai-answer/dialogue.js",
-        "modules/ai-answer/index.js",
-        "content-message-handler.js",
-        "content.js"
+        "modules/ai/config/profile.js",
+        "modules/ai/config/batch.js",
+        "modules/ai/answer/envelope.js",
+        "modules/ai/answer/plan.js",
+        "modules/ai/answer/runner.js",
+        "modules/ai/answer/cache.js",
+        "modules/ai/net/client.js",
+        "modules/ai/answer/validate.js",
+        "modules/ai/chat/session.js",
+        "modules/ai/chat/prompt.js",
+        "modules/ai/chat/view.js",
+        "modules/ai/chat/frame.js",
+        "modules/ai/fill/verify.js",
+        "modules/ai/fill/choice.js",
+        "modules/ai/fill/editor.js",
+        "modules/ai/fill/dropdown.js",
+        "modules/ai/fill/exam.js",
+        "modules/ai/fill/view.js",
+        "modules/ai/fill/main.js",
+        "modules/ai/chat/main.js",
+        "modules/ai/chat/page.js",
+        "modules/ai/chat/init.js",
+        "modules/app/message.js",
+        "modules/app/main.js"
       ],
       "css": [
-        "modules/ai-answer/dialogue.css"
+        "modules/ai/chat/page.css"
       ],
       "run_at": "document_start",
       "all_frames": true
@@ -62,7 +84,7 @@
       "resources": [
         "assets/table.json",
         "injected.js",
-        "modules/ai-answer/chat.css",
+        "modules/ai/chat/main.css",
         "icons/chaoxing.png"
       ],
       "matches": [
@@ -76,7 +98,6 @@
   },
   "optional_host_permissions": [
     "https://*/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
+    "http://*/*"
   ]
 }

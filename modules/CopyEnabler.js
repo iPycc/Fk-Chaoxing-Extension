@@ -1,8 +1,17 @@
 // CopyEnabler - Font decryption module
 
 const CopyEnabler = {
+  readyPromise: null,
+
+  ready() {
+    if (!this.readyPromise) this.readyPromise = this.run();
+    return this.readyPromise;
+  },
+
+  decrypt() { return this.ready(); },
+
   // Main decryption function
-  async decrypt() {
+  async run() {
     try {
       // GlobalLogger.info('Starting font decryption');
       

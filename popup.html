@@ -19,10 +19,10 @@
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <h1 class="plugin-title">Fk-Chaoxing <span class="version">v1.2.4</span></h1>
+        <h1 class="plugin-title">Fk-Chaoxing <span class="version"></span></h1>
       </div>
       <div class="header-right">
-        <button class="btn-icon" id="btn-refresh" title="重载插件" style="margin-right: 4px;">
+        <button class="btn-icon" id="btn-refresh" title="刷新当前页面" style="margin-right: 4px;">
           <i class="ri-refresh-line"></i>
         </button>
         <label class="switch" title="临时关闭/开启插件">
@@ -74,10 +74,7 @@
         <button class="btn btn-primary" id="btn-ai-answer">
           <img id="btn-ai-icon" src="" style="width: 14px; height: 14px; border-radius: 2px; display: none;" />
           <i class="ri-openai-fill" id="btn-ai-icon-default"></i>
-          <span id="btn-ai-text">AI 答题</span>
-        </button>
-        <button class="btn btn-outline" id="btn-auto-apply-toggle">
-          <span id="btn-auto-apply-text">自动作答：关闭</span>
+          <span id="btn-ai-text">打开作答页面</span>
         </button>
       </div>
     </section>
@@ -119,20 +116,42 @@
           <div class="setting-field">
             <label for="ai-batch-size">每次请求题目数</label>
             <input id="ai-batch-size" class="form-control" type="number" min="1" max="100" step="1" inputmode="numeric">
-            <p>题目按页面顺序拆分，每次请求独立答题。</p>
+            <p>生成与讨论都按此上限分批。</p>
           </div>
           <div class="setting-field">
             <label for="ai-concurrency">同时并发数</label>
             <input id="ai-concurrency" class="form-control" type="number" min="1" max="16" step="1" inputmode="numeric">
-            <p>更高的值会同时发出更多请求。</p>
+            <p>对话与生成答案同时处理的批次数，更高的值会发出更多请求。</p>
           </div>
           <div class="setting-field">
             <label for="ai-max-retries">失败重试次数</label>
             <input id="ai-max-retries" class="form-control" type="number" min="0" max="5" step="1" inputmode="numeric">
-            <p>0 表示不重试。</p>
+            <p>网络或答案格式错误时重试当前批次；0 表示不重试。</p>
+          </div>
+          <div class="setting-field">
+            <label for="ai-first-timeout">首次响应（秒）</label>
+            <input id="ai-first-timeout" class="form-control" type="number" min="60" max="3600" step="1" inputmode="numeric">
+          </div>
+          <div class="setting-field">
+            <label for="ai-idle-timeout">流空闲（秒）</label>
+            <input id="ai-idle-timeout" class="form-control" type="number" min="30" max="1800" step="1" inputmode="numeric">
+          </div>
+          <div class="setting-field">
+            <label for="ai-max-timeout">最长时间（秒）</label>
+            <input id="ai-max-timeout" class="form-control" type="number" min="60" max="7200" step="1" inputmode="numeric">
           </div>
           <p id="batch-settings-error" class="field-error" role="alert" hidden></p>
           <button id="btn-batch-save" class="btn btn-primary" type="button">保存答题设置</button>
+        </div>
+        <div class="settings-group">
+          <div class="settings-group-heading"><h3>图片访问权限</h3></div>
+          <div class="form-group">
+            <label for="ai-image-site">图片网站地址</label>
+            <input id="ai-image-site" class="form-control" type="url" placeholder="https://images.example.com" autocomplete="off">
+            <p class="settings-caption">Gemini 会先读取图片内容再发送。若提示图片网站未授权，请填写提示中的地址，授权后回到页面重试。</p>
+          </div>
+          <button id="btn-image-site-authorize" class="btn btn-outline" type="button">授权访问图片网站</button>
+          <p id="image-site-status" class="settings-caption" role="status" aria-live="polite" hidden></p>
         </div>
         <button id="btn-models-open" class="settings-link" type="button">
           <span class="settings-link-icon">AI</span>
@@ -176,19 +195,45 @@
           </div>
         </div>
         <div class="form-group">
-          <label for="ai-model-id">模型 ID</label>
-          <input id="ai-model-id" class="form-control" type="text" placeholder="model-id">
-        </div>
-        <div class="form-group">
           <label for="ai-api-type">接口协议</label>
           <select id="ai-api-type" class="form-control">
             <option value="chat_completions">Chat Completions</option>
             <option value="responses">Responses</option>
+            <option value="anthropic_messages">Claude Messages</option>
+            <option value="gemini_generate_content">Gemini GenerateContent</option>
           </select>
         </div>
         <div class="form-group">
           <label for="ai-api-path">接口路径</label>
           <input id="ai-api-path" class="form-control" type="text" placeholder="/chat/completions">
+        </div>
+        <div class="form-group">
+          <button id="btn-ai-models-fetch" class="btn btn-outline" type="button">拉取模型</button>
+          <p id="ai-models-status" class="settings-caption" role="status" aria-live="polite" hidden></p>
+          <label for="ai-model-id">模型选择</label>
+          <div id="ai-model-choice" class="model-choice">
+            <div class="model-choice-input">
+              <input id="ai-model-id" class="form-control" type="text" role="combobox" aria-expanded="false" aria-controls="ai-model-options" aria-autocomplete="none" autocomplete="off" placeholder="选择或输入模型 ID">
+              <button id="btn-ai-model-options" class="model-choice-toggle" type="button" aria-label="展开模型列表" aria-expanded="false" aria-controls="ai-model-options">▾</button>
+            </div>
+            <ul id="ai-model-options" class="model-options" role="listbox" aria-label="可选模型" hidden></ul>
+          </div>
+          <p class="settings-caption">点击右侧箭头选择模型，或直接输入任意模型 ID。拉取只查询模型信息，无需先保存；列表中的模型可通过连接测试验证。</p>
+        </div>
+        <div id="ai-native-connection" hidden>
+          <div class="form-group">
+            <label for="ai-api-version">Claude API 版本</label>
+            <input id="ai-api-version" class="form-control" type="text" placeholder="2026-10-21">
+          </div>
+          <div class="form-group">
+            <label for="ai-workspace-id">Claude 工作区 ID（可选）</label>
+            <input id="ai-workspace-id" class="form-control" type="text" placeholder="密钥未绑定工作区时填写">
+          </div>
+          <div class="form-group">
+            <label for="ai-claude-fallback-max-tokens">查询失败时的最大输出 tokens（可选）</label>
+            <input id="ai-claude-fallback-max-tokens" class="form-control" type="number" min="1" step="1" inputmode="numeric" placeholder="自动查询失败时使用">
+            <p class="settings-caption">优先查询当前模型的输出上限；未取得有效上限且未填写兜底值时停止生成。</p>
+          </div>
         </div>
         <div class="form-grid">
           <div class="form-group">
@@ -204,14 +249,16 @@
             <input id="ai-temperature" class="form-control" type="number" min="0" max="2" step="0.1" placeholder="默认">
           </div>
         </div>
-        <p class="settings-caption">设置思考等级时不发送温度参数。保存不会调用模型；测试连接可能产生费用。</p>
+        <p class="settings-caption">设置思考等级时不发送温度参数。所选等级按接口协议透传，由服务商决定支持范围与映射。Claude 原生接口在生成前自动查询输出上限，不发送温度；其他协议不发送输出上限参数。保存不会调用模型；测试连接可能产生费用。</p>
         <div class="form-group">
-          <label for="ai-system-prompt">系统提示词</label>
-          <textarea id="ai-system-prompt" class="form-control" rows="4"></textarea>
+          <label for="ai-answer-prompt">作答提示词</label>
+          <textarea id="ai-answer-prompt" class="form-control" rows="8"></textarea>
+          <p class="settings-caption">留空生成时实际使用的完整系统提示词，可编辑 JSON 格式与题型规则。返回格式不符合本地校验要求时不会填写。</p>
         </div>
         <div class="form-group">
-          <label for="ai-user-prompt">用户提示词</label>
-          <textarea id="ai-user-prompt" class="form-control" rows="4"></textarea>
+          <label for="ai-chat-prompt">对话提示词</label>
+          <textarea id="ai-chat-prompt" class="form-control" rows="4"></textarea>
+          <p class="settings-caption">发送讨论消息时使用；同一次响应会携带经过本地校验的结构化答案。</p>
         </div>
         <div class="inline-row">
           <button id="btn-prompt-reset" class="btn btn-outline" type="button">恢复默认提示词</button>
@@ -229,7 +276,9 @@
     </section>
   </div>
 
-  <script src="modules/ai-answer/config.js"></script>
+  <script src="modules/app/ns.js"></script>
+  <script src="modules/ai/config/profile.js"></script>
+  <script src="modules/ai/config/batch.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
