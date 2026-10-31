@@ -76,7 +76,7 @@ jobs:
         run: |
           mkdir -p dist
           git archive --format=zip --output="dist/Fk-Chaoxing-Extension-v$VERSION.zip" HEAD \
-            manifest.json background.js content-message-handler.js content.js injected.js \
+            manifest.json background.js injected.js \
             popup.css popup.html popup.js assets icons modules
           python3 -m zipfile -t "dist/Fk-Chaoxing-Extension-v$VERSION.zip"
 
