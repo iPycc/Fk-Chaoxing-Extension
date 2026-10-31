@@ -5,6 +5,7 @@ const AIChat = {
   quickEffort: null, historyKey: '', opening: null, launcher: null,
   snapshotId: '',
   autoApply: true,
+  preparingRequest: false,
   pageKey() { return `aiChat:${location.origin}${location.pathname}${location.search}`; },
   el(id) { return this.root?.getElementById(id); },
   clampPosition() {
@@ -178,7 +179,13 @@ const AIChat = {
       const settings = await AIConfig.loadBatchSettings();
       const input = this.el('input').value.trim();
       const mode = this.currentMode(input);
-      const request = this.prepareRequest(mode, input);
+      let request;
+      if (this.pending || this.preparingRequest) return;
+      this.preparingRequest = true;
+      this.setBusy(true);
+      try { request = await this.prepareRequest(mode, input); }
+      catch (error) { return this.task(error.message, 'error'); }
+      finally { this.preparingRequest = false; this.setBusy(Boolean(this.pending)); }
       const preview = req => this.batchRequests(req, settings.batchSize)
         .map(batch => ({ questions: this.batchLabel(batch), messages: this.messages(config, batch) }));
       this.el('preview-text').textContent = JSON.stringify({ ...settings,
@@ -324,29 +331,56 @@ const AIChat = {
     const current = AIAnswerCore.parseQuestionContainer(q.container, q.docRef, q.sectionHeader);
     return JSON.stringify(current?.existingAnswer ?? null);
   },
-  snapshotCurrent(item) {
-    const q = this.questions.find(q => this.questionKey(q) === this.questionKey(item));
-    if (!q) return this.snapshot(item);
-    if (!q.remote && q.container) {
-      const current = AIAnswerCore.parseQuestionContainer(q.container, q.docRef, q.sectionHeader);
-      if (current) Object.assign(q, current);
-      q.editorState = this.editorState(q);
-    }
-    return this.snapshot(q);
-  },
-  prepareRequest(mode, input, prior) {
+  async prepareRequest(mode, input, prior) {
     const selected = prior ? (mode === 'chat' ? [] : prior.context || []) : this.chosen();
-    const references = selected.map(q => this.snapshotCurrent(q));
+    const allSelected = !prior && this.el('all').checked;
+    const targetAll = this.el('target').value === 'all';
+    const targets = prior?.target || this.targets(selected);
+    const selectedKeys = new Set(selected.map(q => this.questionKey(q)));
+    const targetKey = !targetAll && !prior ? this.questionKey(targets[0] || {}) : null;
+    // Refresh the frame bridge as well as local DOM before constructing any payload.
+    // Refreshing only local containers would leave remote snapshots unchanged.
+    await this.scanQuestions();
+    const fresh = new Map(this.questions.map(q => [this.questionKey(q), q]));
+    this.selected = new Set(this.questions.flatMap((q, index) => selectedKeys.has(this.questionKey(q)) ? [index] : []));
+    this.renderQuestions();
+    if (targetKey) {
+      const index = this.questions.findIndex(q => this.questionKey(q) === targetKey);
+      if (index >= 0) this.el('target').value = String(index);
+    }
+    const current = item => {
+      const question = fresh.get(this.questionKey(item));
+      if (!question) throw new Error(`第 ${item.index} 题已不在当前答题页面，请重新选择题目`);
+      return this.snapshot(question);
+    };
+    // Never recover a disappeared selection from a saved request or conversation.
+    const refreshed = selected.map(current);
+    const references = allSelected ? this.questions.map(q => this.snapshot(q)) : refreshed;
     const known = new Map(this.contextQuestions.map(q => [this.questionKey(q), q]));
     const addedKeys = [], updatedKeys = [];
+    if (mode === 'chat') {
+      for (const [key, previous] of known) {
+        const question = current(previous);
+        if (JSON.stringify(previous) !== JSON.stringify(question)) updatedKeys.push(key);
+        known.set(key, question);
+      }
+    }
     for (const q of references) {
       const key = this.questionKey(q), previous = known.get(key);
       if (!previous) addedKeys.push(key);
-      else if (JSON.stringify(previous) !== JSON.stringify(q)) updatedKeys.push(key);
+      else if (JSON.stringify(previous) !== JSON.stringify(q) && !updatedKeys.includes(key)) updatedKeys.push(key);
       known.set(key, q);
     }
     const context = mode === 'chat' ? [...known.values()] : references;
-    const target = mode === 'chat' ? [] : (prior?.target || this.targets(references)).map(q => this.snapshotCurrent(q));
+    const target = mode === 'chat' ? [] : !prior && targetAll ? references : targets.map(current);
+    for (const question of target) {
+      if (['single_choice', 'multiple_choice'].includes(question.type) && !question.options?.length) {
+        throw new Error(`第 ${question.index} 题未提取到选项，请确认答题区已加载后重试`);
+      }
+      if (question.type === 'fill_blank' && !(question.blankCount > 0)) {
+        throw new Error(`第 ${question.index} 题未提取到填空答题区，请确认答题区已加载后重试`);
+      }
+    }
     const referenceKeys = prior?.referenceKeys || references.map(q => this.questionKey(q));
     return JSON.parse(JSON.stringify({ mode, input, context, target, referenceKeys, addedKeys, updatedKeys,
       focusKeys: referenceKeys.length ? referenceKeys : this.lastReferenceKeys,
@@ -541,12 +575,20 @@ const AIChat = {
       (error, attempt) => this.task(`${label}失败，准备第 ${attempt}/${maxRetries} 次重试：${error.message}`));
   },
   async send(mode, prior) {
+    if (this.pending || this.preparingRequest) return;
+    this.preparingRequest = true;
+    this.setBusy(true);
+    try { await this.sendPrepared(mode, prior); }
+    catch (error) { this.task(error.message, 'error'); }
+    finally { this.preparingRequest = false; this.setBusy(Boolean(this.pending)); }
+  },
+  async sendPrepared(mode, prior) {
     if (this.pending) return;
     const input = prior?.input ?? this.el('input').value.trim();
     mode ??= this.currentMode(input);
     if (mode === 'answer' && this.isDiscussion()) return this.task('当前处于讨论模式，请先清空上下文再直接生成答案。', 'error');
     if (mode === 'chat' && !input && (prior || !this.chosen().length)) return;
-    const request = this.prepareRequest(mode, input, prior);
+    const request = await this.prepareRequest(mode, input, prior);
     if (mode !== 'chat' && !request.target.length) return this.task('请先选择作答目标', 'error');
     if (mode === 'chat' && !input) {
       this.acceptRequest(request);
@@ -924,19 +966,20 @@ const AIChat = {
       : ratio >= 0.8 ? '上下文接近上限，建议先填入已确定答案，再清空上下文，继续讨论剩余题目。' : '';
   },
   updateActions() {
+    const busy = Boolean(this.pending) || this.preparingRequest;
     const input = this.el('input').value.trim();
     const selected = this.chosen();
     const hasTarget = this.targets(this.isDiscussion() ? this.contextQuestions : selected).length > 0;
     const chatting = this.currentMode(input) === 'chat';
     this.el('send').textContent = chatting ? '发送' : '生成答案';
-    this.el('send').disabled = Boolean(this.pending) || (chatting ? !input && !selected.length : !hasTarget);
+    this.el('send').disabled = busy || (chatting ? !input && !selected.length : !hasTarget);
     this.el('input').placeholder = this.isDiscussion()
       ? '输入内容继续讨论；也可勾选新题后发送资料。确定答案后点击“填入答案”。'
       : this.autoApply ? '留空可直接生成并填写答案；发送内容后进入讨论模式…'
       : '留空可生成答案；确认后点击“填入答案”…';
-    this.el('fill').disabled = Boolean(this.pending) || AIAnswerCache.count(this.snapshotId) === 0;
-    this.el('regenerate').disabled = Boolean(this.pending) || !this.history.some(item => item.role === 'user' && item.request && !item.request.localOnly);
-    this.el('clear-context').disabled = Boolean(this.pending) || (!this.history.length && !this.contextQuestions.length && !this.isDiscussion());
+    this.el('fill').disabled = busy || AIAnswerCache.count(this.snapshotId) === 0;
+    this.el('regenerate').disabled = busy || !this.history.some(item => item.role === 'user' && item.request && !item.request.localOnly);
+    this.el('clear-context').disabled = busy || (!this.history.length && !this.contextQuestions.length && !this.isDiscussion());
     this.renderContextInfo();
   },
   setBusy(value) {
