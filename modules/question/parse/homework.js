@@ -76,6 +76,7 @@ const HomeworkExtractor = {
   // Main extraction method
   extract(doc = document, withContainers = false) {
     const questions = [];
+    const modernQuestionSelector = '.questionLi.singleQuesId, .singleQuesId[id^="question"], .singleQuesId[typename]';
 
     // Helper to find title
     const getTitleFrom = (root) => {
@@ -84,7 +85,10 @@ const HomeworkExtractor = {
       return QuestionContainers.withImageLinks(this.normalizeText(node?.textContent || ''), QuestionContainers.stemRoot(root));
     };
 
-    const containers = Array.from(doc.querySelectorAll('.TiMu'));
+    // Some saved homework pages use one outer .TiMu around several modern
+    // .singleQuesId questions. That wrapper is a page section, not a question.
+    const containers = Array.from(doc.querySelectorAll('.TiMu')).filter(box =>
+      !box.matches(modernQuestionSelector) && !box.querySelector(modernQuestionSelector));
     if (containers.length > 0) {
       containers.forEach(box => {
         const title = getTitleFrom(box);
@@ -104,9 +108,7 @@ const HomeworkExtractor = {
       });
     }
 
-    const modernContainers = Array.from(doc.querySelectorAll(
-      '.questionLi.singleQuesId, .singleQuesId[id^="question"], .singleQuesId[typename]'
-    ));
+    const modernContainers = Array.from(doc.querySelectorAll(modernQuestionSelector));
     modernContainers.forEach(container => {
       // Legacy wrappers were already read through their inner TiMu. Adding
       // image-only titles must not count the enclosing wrapper a second time.
