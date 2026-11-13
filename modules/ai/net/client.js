@@ -32,19 +32,32 @@ const AIApi = {
     return `题目数据如下：\n${JSON.stringify(payload, null, 2)}`;
   },
 
-  requestText(request) {
+  questionIndices(keys = [], questions = []) {
+    const indices = new Map();
+    for (const question of questions) {
+      if (!Number.isInteger(question.index) || question.index < 1) continue;
+      indices.set(question.questionKey || `${question.index}:${question.id}`, question.index);
+      indices.set(`${question.index}:${question.id}`, question.index);
+    }
+    return keys.filter(key => indices.has(key)).map(key => indices.get(key));
+  },
+
+  requestText(request, questions = request.context) {
     if (request.mode !== 'chat') {
       const keys = new Set(request.target.map(q => `${q.index}:${q.id}`));
       const extra = request.context.filter(q => !keys.has(`${q.index}:${q.id}`));
       return `${this.buildPrompt(request.target)}\n\n辅助题目上下文：\n${JSON.stringify(extra, null, 2)}\n\n请解答作答目标。`;
     }
-    const indices = keys => keys.map(key => key.split(':')[0]).join('、');
-    const referenceKeys = request.referenceKeys || request.context.map(q => `${q.index}:${q.id}`);
+    const indices = keys => this.questionIndices(keys, questions).join('、');
+    const reference = indices(request.referenceKeys || request.context.map(q => q.questionKey || `${q.index}:${q.id}`));
+    const added = indices(request.addedKeys);
+    const updated = indices(request.updatedKeys);
+    const focus = indices(request.focusKeys);
     return [
-      ...(referenceKeys.length ? [`本轮引用：第 ${indices(referenceKeys)} 题。`] : []),
-      ...(request.addedKeys?.length ? [`本轮加入资料：第 ${indices(request.addedKeys)} 题。`] : []),
-      ...(request.updatedKeys?.length ? [`本轮更新资料：第 ${indices(request.updatedKeys)} 题，以最新题目资料为准。`] : []),
-      ...(request.focusKeys?.length ? [`最近引用范围：第 ${indices(request.focusKeys)} 题；具体讨论对象以用户输入为准。`] : []),
+      ...(reference ? [`本轮引用：第 ${reference} 题。`] : []),
+      ...(added ? [`本轮加入资料：第 ${added} 题。`] : []),
+      ...(updated ? [`本轮更新资料：第 ${updated} 题，以最新题目资料为准。`] : []),
+      ...(focus ? [`最近引用范围：第 ${focus} 题；具体讨论对象以用户输入为准。`] : []),
       `本轮输入：\n${request.input || '仅加入题目资料，暂不解答。'}`
     ].join('\n');
   },
