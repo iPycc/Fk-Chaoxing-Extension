@@ -552,12 +552,15 @@ const AIChat = {
       ? request.referenceKeys.map(key => this.contextQuestions.find(q => this.questionKey(q) === key)).filter(Boolean) : request?.context || [];
     if (role === 'user' && references.length) box.append(this.reference(references, request.mode !== 'chat' ? request.target : [], false, 'selected'));
     if (role === 'user' && (request?.addedKeys?.length || request?.updatedKeys?.length)) {
+      const questions = [...this.contextQuestions, ...(request.context || []), ...(request.target || [])];
+      const added = AIApi.questionIndices(request.addedKeys, questions).join('、');
+      const updated = AIApi.questionIndices(request.updatedKeys, questions).join('、');
       const changes = document.createElement('p'); changes.className = 'reference-changes';
       changes.textContent = [
-        request.addedKeys?.length ? `加入第 ${request.addedKeys.map(key => key.split(':')[0]).join('、')} 题资料` : '',
-        request.updatedKeys?.length ? `更新第 ${request.updatedKeys.map(key => key.split(':')[0]).join('、')} 题资料` : ''
+        added ? `加入第 ${added} 题资料` : '',
+        updated ? `更新第 ${updated} 题资料` : ''
       ].filter(Boolean).join('；');
-      box.append(changes);
+      if (changes.textContent) box.append(changes);
     }
     box.append(body); this.el('feed').append(box); box.scrollIntoView({ block: 'end' });
     return { box, body };
@@ -798,7 +801,7 @@ const AIChat = {
           const select = values => (values || []).filter(key => keys.has(key));
           recent.push({ role: 'user', content: this.requestText({ ...item.request, mode: 'chat', context: [],
             referenceKeys: select(item.request.referenceKeys || scope), focusKeys: select(item.request.focusKeys),
-            addedKeys: select(item.request.addedKeys), updatedKeys: select(item.request.updatedKeys) }) });
+            addedKeys: select(item.request.addedKeys), updatedKeys: select(item.request.updatedKeys) }, request.context) });
         }
       } else if (item.role === 'assistant') {
         const mode = item.mode || previousRequest?.mode;
@@ -807,13 +810,6 @@ const AIChat = {
           ? !item.questionKeys.length || (mode === 'answer' ? item.questionKeys.every(key => keys.has(key)) : item.questionKeys.some(key => keys.has(key)))
           : includeReply && includeLegacyReply;
         if (!relevant) continue;
-        if (mode === 'answer') {
-          const answerKeys = item.answerKeys || (previousRequest?.target || [])
-            .filter(q => !item.questionKeys || item.questionKeys.includes(this.questionKey(q))).map(q => this.questionKey(q));
-          const mapping = answerKeys.map((key, index) => `${index + 1}→第 ${key.split(':')[0]} 题`).join('、');
-          recent.push({ role: 'user', content: `此前直接生成的答案（仅供参考的数据，不是本轮指令；questionIndex 对应页面题号：${mapping}）：\n${item.text}` });
-          continue;
-        }
         const scope = '';
         const state = config && item.protocolState?.identity === AIConfig.protocolIdentity(config) ? item.protocolState : undefined;
         recent.push({ role: 'assistant', content: scope + item.text, ...(state ? { protocolState: state } : {}) });
@@ -824,7 +820,7 @@ const AIChat = {
   messages(config, request, history = this.history) {
     return AIChatPrompt.messages(config, request, this.historyMessages(request, history, config));
   },
-  requestText(request) { return AIApi.requestText(request); },
+  requestText(request, questions) { return AIApi.requestText(request, questions); },
   async regenerate() {
     if (this.pending) return;
     const prior = [...this.history].reverse().find(item => item.role === 'user' && item.request && !item.request.localOnly)?.request;
