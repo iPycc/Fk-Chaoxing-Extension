@@ -19,7 +19,11 @@ const QuestionFrame = {
   },
 
   allowed(origin) {
-    try { const host = new URL(origin).hostname.toLowerCase(); return host === 'chaoxing.com' || host.endsWith('.chaoxing.com'); }
+    try {
+      const host = new URL(origin).hostname.toLowerCase();
+      return host === 'chaoxing.com' || host.endsWith('.chaoxing.com') ||
+        host === 'xuexitong.com' || host.endsWith('.xuexitong.com');
+    }
     catch (_) { return false; }
   },
 

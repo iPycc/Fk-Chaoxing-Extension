@@ -9,7 +9,8 @@
     "storage"
   ],
   "host_permissions": [
-    "*://*.chaoxing.com/*"
+    "*://*.chaoxing.com/*",
+    "*://*.xuexitong.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -25,7 +26,8 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.chaoxing.com/*"
+        "*://*.chaoxing.com/*",
+        "*://*.xuexitong.com/*"
       ],
       "js": [
         "assets/TyprMd5.js",
@@ -88,7 +90,8 @@
         "icons/chaoxing.png"
       ],
       "matches": [
-        "*://*.chaoxing.com/*"
+        "*://*.chaoxing.com/*",
+        "*://*.xuexitong.com/*"
       ]
     }
   ],
