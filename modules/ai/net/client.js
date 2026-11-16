@@ -50,7 +50,7 @@ const AIApi = {
   },
 
   buildMessages(config, request, history = []) {
-    const protocol = request.protocolToken ? `\n\n${AIAnswerEnvelope.instruction(request.protocolToken, request.mode)}` : '';
+    const protocol = request.protocolToken ? `\n\n${AIAnswerEnvelope.instruction(request.protocolToken, request.mode, request.structuredOnly)}` : '';
     const system = { role: 'system', content: AIConfig.buildSystemPrompt(config, request.mode) + protocol };
     if (request.mode === 'chat') {
       return [system,
