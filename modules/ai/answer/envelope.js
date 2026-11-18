@@ -6,16 +6,18 @@ const AIAnswerEnvelope = {
       `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
   },
   markers(token) { return { open: `<fk_answers_${token}>`, close: `</fk_answers_${token}>` }; },
-  instruction(token, mode = 'answer') {
+  instruction(token, mode = 'answer', structuredOnly = false) {
     const { open, close } = this.markers(token);
     const coverage = mode === 'answer'
       ? 'answers 必须逐题覆盖本批全部题目。'
       : '只列出本次可见回答中明确确定的答案；没有确定答案时返回 related:false 与空 answers。';
     return [
-      '在可见回答末尾追加以下机器协议；协议之后禁止输出任何内容。',
+      structuredOnly ? '只输出以下机器协议，不要输出解释或代码块；协议之后禁止输出任何内容。'
+        : '在可见回答末尾追加以下机器协议；协议之后禁止输出任何内容。',
       `开始标记：${open}`,
       `结束标记：${close}`,
       '标记之间只输出一行合法 JSON：{"version":1,"related":true,"answers":[{"questionKey":"题目键","questionIndex":1,"type":"multiple_choice","answers":["A","C"]}]}',
+      ...(mode === 'answer' ? ['程序题示例：{"questionKey":"题目键","questionIndex":1,"type":"programming","answer":"完整代码，换行使用 JSON 转义"}。每道程序题的 answer 必须包含完整代码。'] : []),
       coverage,
       'questionIndex 使用当前批次序号；questionKey 和 type 必须原样复制题目数据。'
     ].join('\n');
@@ -38,7 +40,7 @@ const AIAnswerEnvelope = {
     const text = String(raw || '');
     const { open, close } = this.markers(token);
     const start = text.indexOf(open);
-    if (start < 0) throw this.error('AI 未返回结构化答案标记');
+    if (start < 0) throw Object.assign(this.error('AI 未返回结构化答案标记'), { code: 'missing_answer_marker' });
     const end = text.indexOf(close, start + open.length);
     if (end < 0) throw this.error('AI 返回的结构化答案未结束');
     if (text.slice(end + close.length).trim()) throw this.error('结构化答案后存在额外内容');

@@ -630,9 +630,16 @@ const AIChat = {
           const assistant = this.addBubble('assistant', '', batches.length > 1 ? `${modelLabel} · ${label}` : modelLabel);
           const thoughtView = this.addThought(assistant);
           try {
+            let structuredOnly = false;
             // The same request generates the answer and its structure; validation runs locally.
             const done = await this.retryRequest(async () => {
-              const reply = await this.streamReply(config, batch, history, job, assistant, thoughtView);
+              let reply;
+              try {
+                reply = await this.streamReply(config, { ...batch, structuredOnly }, history, job, assistant, thoughtView);
+              } catch (error) {
+                if (batch.mode === 'answer' && error.code === 'missing_answer_marker') structuredOnly = true;
+                throw error;
+              }
               job.controller.signal.throwIfAborted();
               const usage = AIConfig.normalizeUsage(reply.usage || {}, config.apiType);
               if (usage.inputTokens !== null && (job.maxInputTokens === null || usage.inputTokens > job.maxInputTokens)) {
