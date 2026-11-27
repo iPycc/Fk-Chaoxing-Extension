@@ -9,6 +9,54 @@ const AIApi = {
     model: ''
   },
 
+  // Upstream sends raw image URLs, which return 403 outside the logged-in
+  // browser. Fetch bytes in-page and pass a data URL to the model instead.
+  imageCache: new Map(),
+
+  async imageDataUrl(url) {
+    if (this.imageCache.has(url)) return this.imageCache.get(url);
+    const result = await new Promise(resolve => {
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        // withCredentials / arraybuffer are rejected by CORS; this is the
+        // only form that returns raw bytes for Chaoxing image URLs.
+        xhr.overrideMimeType('text/plain; charset=x-user-defined');
+        xhr.timeout = 10000;
+        xhr.onload = () => {
+          if (xhr.status < 200 || xhr.status >= 300) return resolve('');
+          const text = xhr.responseText || '';
+          if (!text.length) return resolve('');
+          let binary = '';
+          for (let i = 0; i < text.length; i++) {
+            binary += String.fromCharCode(text.charCodeAt(i) & 0xff);
+          }
+          const type = (xhr.getResponseHeader('Content-Type') || '').split(';')[0].trim();
+          const mime = /^image\//i.test(type) ? type
+            : /\.(jpe?g)(\?|$)/i.test(url) ? 'image/jpeg'
+              : /\.(gif)(\?|$)/i.test(url) ? 'image/gif'
+                : /\.(webp)(\?|$)/i.test(url) ? 'image/webp' : 'image/png';
+          resolve(`data:${mime};base64,${btoa(binary)}`);
+        };
+        xhr.onerror = () => resolve('');
+        xhr.ontimeout = () => resolve('');
+        xhr.send();
+      } catch (_) { resolve(''); }
+    });
+    this.imageCache.set(url, result);
+    return result;
+  },
+
+  async warmImages(questions = []) {
+    const urls = new Set();
+    [...(questions || [])].forEach(question => {
+      [...(question?.parentImages || []), ...(question?.images || [])].forEach(image => {
+        if (image?.url && /^https?:\/\//i.test(image.url)) urls.add(image.url);
+      });
+    });
+    await Promise.all([...urls].map(url => this.imageDataUrl(url)));
+  },
+
   buildPrompt(questions) {
     const payload = {
       questions: questions.map((question, index) => ({
@@ -83,7 +131,8 @@ const AIApi = {
         if (!/^https?:\/\//i.test(image.url) && !/^data:image\/(png|jpe?g|gif|webp);base64,/i.test(image.url)) return;
         seen.add(image.url);
         content.push({ type: 'text', text: `第 ${question.index || index + 1} 题引用图片：${image.alt || '题目图片'}（相同 URL 的图片可供其他子题共同引用）` });
-        content.push({ type: 'image_url', image_url: { url: image.url } });
+        const dataUrl = this.imageCache.get(image.url);
+        content.push({ type: 'image_url', image_url: { url: dataUrl || image.url } });
       });
     });
     return content.length > 1 ? content : text;
@@ -117,6 +166,7 @@ const AIApi = {
     const request = { mode: 'answer', context: questions, target: questions, protocolToken: AIAnswerEnvelope.token() };
     this.validateConfig(config);
     const timeouts = config.timeouts || await AIConfig.loadBatchSettings();
+    await this.warmImages(questions);
 
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
@@ -237,7 +287,10 @@ const AIApi = {
       return answer.answers.every(value => labels.includes(value)) ? '' : '多选答案包含题目中不存在的选项';
     }
     if (question.type === 'fill_blank') {
-      return Array.isArray(answer.answers) && answer.answers.length === question.blankCount && answer.answers.every(Boolean)
+      const values = Array.isArray(answer.answers)
+        ? answer.answers.map(value => String(value ?? '').trim()) : [];
+      // Allow partial answers: unfilled blanks stay empty for manual work.
+      return values.length > 0 && values.length <= question.blankCount && values.some(Boolean)
         ? '' : '填空答案数量不完整';
     }
     if (question.type === 'sorting' || question.type === 'matching') {

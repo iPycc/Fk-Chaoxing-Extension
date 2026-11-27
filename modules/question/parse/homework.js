@@ -49,22 +49,28 @@ const HomeworkExtractor = {
   },
 
   parseModernQuestion(container) {
-    const titleEl = container.querySelector('h3.mark_name, h3');
-    const typeLabel = this.getTypeLabel(container);
+    // Sub-questions of reading/listening tasks have no h3; their stem is in
+    // .reader_answer_tit / .clearfix.
+    const titleEl = container.querySelector('h3.mark_name, h3, .reader_answer_tit, .clearfix');
+    const typeLabel = this.getTypeLabel(container) || QuestionContainers.typeLabel(container);
     const stem = this.normalizeText(titleEl?.textContent || '')
       .replace(/^\d+\.\s*/, '')
-      .replace(/^\((?:单选题|多选题|判断题|填空题|简答题|排序题|连线题)\)\s*/, '');
+      .replace(/^\(\d+\)\s*/, '')
+      .replace(/^\((?:单选题|多选题|判断题|填空题|简答题|排序题|连线题)\)\s*/, '')
+      .replace(/^\[(?:单选题|多选题|判断题|填空题|简答题)\]\s*/, '');
     const title = QuestionContainers.withImageLinks(this.normalizeText(`${typeLabel} ${stem}`), QuestionContainers.stemRoot(container));
 
     if (!title) return null;
     const dropdown = DropdownQuestions.extract(container);
     if (dropdown) return { title, ...dropdown };
 
-    const options = this.sortOptions(Array.from(container.querySelectorAll('.stem_answer .answerBg')).map((el, idx) => {
+    let options = this.sortOptions(Array.from(container.querySelectorAll('.stem_answer .answerBg')).map((el, idx) => {
       const letter = this.getOptionLetter(idx);
       const content = QuestionContainers.withImageLinks(this.normalizeText(el.querySelector('.answer_p')?.textContent || el.textContent || ''), el);
       return letter && content ? `${letter}. ${content}` : '';
     }).filter(Boolean));
+    // Homework sub-question options are li[qid][onclick*=addChoice] / .hoverDiv.
+    if (!options.length) options = this.sortOptions(QuestionContainers.options(container));
 
     return {
       title,
@@ -77,6 +83,19 @@ const HomeworkExtractor = {
   extract(doc = document, withContainers = false) {
     const questions = [];
     const modernQuestionSelector = '.questionLi.singleQuesId, .singleQuesId[id^="question"], .singleQuesId[typename]';
+
+    // Expand reading/listening sub-questions; otherwise one big question with
+    // 20 options is sent to the model and the whole question fails to write.
+    const subSelector = '.readComprehensionQues .readCompreHensionItem, .reading_answer';
+    const addSubQuestions = (box) => {
+      const subs = Array.from(box.querySelectorAll(subSelector));
+      if (!subs.length) return false;
+      subs.forEach(sub => {
+        const question = this.parseModernQuestion(sub);
+        if (question) questions.push(withContainers ? { ...question, container: sub, docRef: doc } : question);
+      });
+      return true;
+    };
 
     // Helper to find title
     const getTitleFrom = (root) => {
@@ -91,6 +110,7 @@ const HomeworkExtractor = {
       !box.matches(modernQuestionSelector) && !box.querySelector(modernQuestionSelector));
     if (containers.length > 0) {
       containers.forEach(box => {
+        if (addSubQuestions(box)) return;
         const title = getTitleFrom(box);
         if (!title) return;
 
@@ -110,6 +130,7 @@ const HomeworkExtractor = {
 
     const modernContainers = Array.from(doc.querySelectorAll(modernQuestionSelector));
     modernContainers.forEach(container => {
+      if (addSubQuestions(container)) return;
       // Legacy wrappers were already read through their inner TiMu. Adding
       // image-only titles must not count the enclosing wrapper a second time.
       if (container.querySelector('.TiMu')) return;

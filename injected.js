@@ -51,7 +51,9 @@
             typeof window.changeQuestionCardColor !== 'function' || typeof window.$ !== 'function') {
           throw new Error('页面未提供可用的单题暂存能力，请刷新后重试');
         }
-        for (const textarea of container.querySelectorAll('textarea[id^="answer"]')) {
+        // Only answerEditor* is a UEditor; writing questions use a plain textarea
+        // and passing it to UE.getEditor creates a broken instance.
+        for (const textarea of container.querySelectorAll('textarea[id^="answerEditor"]')) {
           if (!window.UE?.getEditor) throw new Error('页面编辑器尚未准备好');
           const editor = window.UE.getEditor(textarea.id);
           if (!editor?.setContent || !editor.sync) throw new Error('页面编辑器尚未准备好');
