@@ -743,6 +743,22 @@ const AIAnswerCore = {
     return written;
   },
 
+  // Chaoxing's submitForm drops temp saves while window.submitOnce is set.
+  // Clicking several sub-questions back-to-back loses all but the first save,
+  // which leaves reading questions marked unanswered on the answer sheet.
+  async waitSubmitIdle(question, attempts = 120) {
+    const doc = question?.container?.ownerDocument;
+    const body = doc?.body;
+    if (!body) return true;
+    // The content script lives in an isolated world, so window.submitOnce is
+    // not shared with the page. lockSubmit() also sets body pointer-events to
+    // none while saving, which is visible through the shared DOM.
+    for (let i = 0; i < attempts && body.style.pointerEvents === 'none'; i++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    return body.style.pointerEvents !== 'none';
+  },
+
   async applyChoiceAnswer(question, answer) {
     if (!question.choiceTargets.length) {
       return false;
@@ -771,8 +787,10 @@ const AIAnswerCore = {
       const selectedSet = new Set(selectedLetters);
       for (const target of question.choiceTargets) {
         if (this.isChoiceSelected(target) === selectedSet.has(target.letter)) continue;
+        await this.waitSubmitIdle(question);
         const clickTarget = target.clickable || target.item;
         if (clickTarget && typeof clickTarget.click === 'function') clickTarget.click();
+        await this.waitSubmitIdle(question);
       }
       if (await this.waitForChoiceState(question, selectedLetters, 2)) return true;
     }
