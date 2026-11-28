@@ -59,6 +59,20 @@ const PasteEnabler = {
     } catch (err) {}
   },
 
+  // Some exam pages register a bubble-phase paste listener directly on the
+  // textarea that calls preventDefault(), so Ctrl+V is silently rejected.
+  // Stop the event in the capture phase before it reaches that listener while
+  // leaving the browser's native paste action intact.
+  allowNativePaste() {
+    document.addEventListener('paste', event => {
+      const el = event.target;
+      if (!el) return;
+      const editable = el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable;
+      if (!editable) return;
+      event.stopImmediatePropagation();
+    }, true);
+  },
+
   enableSituationalDialogueClipboard() {
     ['paste', 'copy'].forEach(type => {
       document.addEventListener(type, event => {
@@ -129,6 +143,7 @@ const PasteEnabler = {
     this.injectGlobalStyles();
     this.removeGlobalRestrictions();
     this.enableExistingElements();
+    this.allowNativePaste();
     this.enableSituationalDialogueClipboard();
     this.startMutationObserver();
     

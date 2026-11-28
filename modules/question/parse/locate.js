@@ -101,8 +101,21 @@ const QuestionContainers = {
       title: this.text(root),
       parentTitle: parentRoot ? this.text(parentRoot) : '',
       parentId: parent?.getAttribute('data') || parent?.id || '',
-      subquestionId: container.getAttribute('itemid') || '',
-      subquestionNumber: container.classList.contains('reading_answer') ? this.titleRoot(container)?.textContent?.trim().match(/^[（(](\d+)[）)]/)?.[1] || '' : '',
+      // Reading sub-questions have no itemid/qid; judge sub-questions even have
+      // an empty hidden answer name. Fall back through itemid, hidden field and
+      // number so the children get unique IDs and are not deduplicated.
+      subquestionId: (function () {
+        const isSub = container.classList.contains('reading_answer') || container.classList.contains('readCompreHensionItem');
+        const direct = container.getAttribute('itemid')
+          || container.querySelector('[itemid]')?.getAttribute('itemid') || '';
+        if (direct) return direct;
+        if (!isSub) return '';
+        const hidden = container.querySelector('input[type="hidden"][name^="answer"], input[type="hidden"][id^="answer"]');
+        return (hidden?.name || hidden?.id || '').replace(/^answer/, '')
+          || (container.querySelector('.index, .reader_answer_tit')?.textContent || '').trim().match(/^[（(]?(\d+)/)?.[1] || '';
+      })(),
+      subquestionNumber: (container.classList.contains('reading_answer') || container.classList.contains('readCompreHensionItem'))
+        ? (container.querySelector('.index, .reader_answer_tit')?.textContent || '').trim().match(/^[（(]?(\d+)/)?.[1] || '' : '',
       images: [...this.images(root), ...optionRoots.flatMap(node => this.images(node))],
       parentImages: this.images(parentRoot)
     };

@@ -714,14 +714,19 @@ const AIAnswerCore = {
   },
 
   async applyFillBlankAnswer(question, answer) {
-    if (!question.fillTargets.length || !Array.isArray(answer.answers) ||
-        answer.answers.length !== question.fillTargets.length || answer.answers.some(value => !String(value || '').trim())) {
-      return false;
-    }
+    const values = Array.isArray(answer.answers)
+      ? answer.answers.slice(0, question.fillTargets.length).map(value => String(value ?? '').trim()) : [];
+    if (!question.fillTargets.length || !values.some(Boolean)) return false;
 
-    const written = question.fillTargets.map((target, index) => this.writeEditorContent(target, answer.answers[index]));
+    // Write whatever the model answered; leave the remaining blanks untouched.
+    const written = question.fillTargets.map((target, index) => {
+      const value = values[index];
+      if (!value) return true;
+      return this.writeEditorContent(target, value);
+    });
     if (written.some(result => !result)) throw new Error('部分填空未能写入，已拒绝标记整题成功');
-    if (question.fillTargets.some((target, index) => !AIFillEditor.matches(target, answer.answers[index]))) {
+    if (question.fillTargets.some((target, index) =>
+      values[index] && !AIFillEditor.matches(target, values[index]))) {
       throw new Error('部分填空写入内容校验失败');
     }
     return true;
@@ -736,6 +741,22 @@ const AIAnswerCore = {
     const written = this.writeEditorContent(target, answer.answer);
     if (written && !AIFillEditor.matches(target, answer.answer)) throw new Error('简答题写入内容校验失败');
     return written;
+  },
+
+  // Chaoxing's submitForm drops temp saves while window.submitOnce is set.
+  // Clicking several sub-questions back-to-back loses all but the first save,
+  // which leaves reading questions marked unanswered on the answer sheet.
+  async waitSubmitIdle(question, attempts = 120) {
+    const doc = question?.container?.ownerDocument;
+    const body = doc?.body;
+    if (!body) return true;
+    // The content script lives in an isolated world, so window.submitOnce is
+    // not shared with the page. lockSubmit() also sets body pointer-events to
+    // none while saving, which is visible through the shared DOM.
+    for (let i = 0; i < attempts && body.style.pointerEvents === 'none'; i++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    return body.style.pointerEvents !== 'none';
   },
 
   async applyChoiceAnswer(question, answer) {
@@ -766,8 +787,10 @@ const AIAnswerCore = {
       const selectedSet = new Set(selectedLetters);
       for (const target of question.choiceTargets) {
         if (this.isChoiceSelected(target) === selectedSet.has(target.letter)) continue;
+        await this.waitSubmitIdle(question);
         const clickTarget = target.clickable || target.item;
         if (clickTarget && typeof clickTarget.click === 'function') clickTarget.click();
+        await this.waitSubmitIdle(question);
       }
       if (await this.waitForChoiceState(question, selectedLetters, 2)) return true;
     }
@@ -900,7 +923,13 @@ const AIAnswerCore = {
   },
 
   writeEditorContent(target, value) {
-    const html = this.buildEditorHtml(value);
+    // Writing questions use a plain textarea named answer<id>, not answerEditor<id>.
+    // Some pages inject an empty ueditor iframe into it, so iframe presence is not
+    // a reliable signal for rich text.
+    const editorTextarea = /^answerEditor/i.test(target.textarea?.id || '')
+      || /ueditor|edui/i.test(target.textarea?.id || '');
+    const plainTextarea = !!target.textarea && !editorTextarea;
+    const html = plainTextarea ? String(value ?? '') : this.buildEditorHtml(value);
     let updated = false;
 
     const ue = this.getUeEditorInstance(target.textarea?.id);
